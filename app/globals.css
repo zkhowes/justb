@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #faf8f5;
+  --bg-card: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #5a5a5a;
+  --text-muted: #8a8a8a;
+  --border: #e8e4df;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.04);
+
+  /* Category colors */
+  --cat-history: #8b6914;
+  --cat-history-bg: #fef9e7;
+  --cat-nature: #2d7a3a;
+  --cat-nature-bg: #edf7ee;
+  --cat-weather: #2563a8;
+  --cat-weather-bg: #e8f2fc;
+  --cat-culture: #7c3aed;
+  --cat-culture-bg: #f3eeff;
+  --cat-food: #c2410c;
+  --cat-food-bg: #fff3e8;
+  --cat-sports: #b91c1c;
+  --cat-sports-bg: #fde8e8;
+  --cat-music: #be185d;
+  --cat-music-bg: #fde8f0;
+  --cat-community: #0d7377;
+  --cat-community-bg: #e6f5f5;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Feed card image */
+.feed-card-image {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0ece7 25%,
+    #e8e4df 50%,
+    #f0ece7 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
