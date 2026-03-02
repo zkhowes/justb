@@ -57,6 +57,30 @@ export default function FeedPage() {
     fetchFeed(saved);
   }, [router]);
 
+  async function fetchImages(feedItems: FeedItem[]) {
+    const withQueries = feedItems.filter((i) => i.imageQuery);
+    if (!withQueries.length) return;
+
+    try {
+      const res = await fetch("/api/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withQueries),
+      });
+      if (!res.ok) return;
+      const imageMap: Record<string, string> = await res.json();
+      if (Object.keys(imageMap).length === 0) return;
+
+      setItems((prev) =>
+        prev.map((item) =>
+          imageMap[item.id] ? { ...item, imageUrl: imageMap[item.id] } : item
+        )
+      );
+    } catch {
+      // Images are optional — fail silently
+    }
+  }
+
   async function fetchFeed(cityName: string) {
     setLoading(true);
     setError(null);
@@ -65,8 +89,10 @@ export default function FeedPage() {
         `/api/feed?city=${encodeURIComponent(cityName)}`
       );
       if (!res.ok) throw new Error("Failed to fetch feed");
-      const data = await res.json();
+      const data: FeedItem[] = await res.json();
       setItems(data);
+      // Fire-and-forget: fetch images after cards are rendered
+      fetchImages(data);
     } catch {
       setError("Something went wrong generating your feed. Try refreshing.");
     } finally {

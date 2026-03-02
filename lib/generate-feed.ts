@@ -1,7 +1,6 @@
 import { anthropic } from "./anthropic";
 import { geocodeCity } from "./geocode";
 import { getAstroData } from "./astro";
-import { enrichWithImages } from "./images";
 import { FeedItem } from "./types";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -103,7 +102,6 @@ Like a knowledgeable, curious local friend — warm, informative, grounded in th
   }
 
   let items = JSON.parse(jsonMatch[0]) as FeedItem[];
-  items = await enrichWithImages(items);
   items = shuffle(items);
 
   return items;
