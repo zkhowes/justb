@@ -12,22 +12,25 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+function stripCitations(text: string): string {
+  return text.replace(/<\/?cite[^>]*>/g, "");
+}
+
 export async function generateFeed(
   city: string,
   date: string
 ): Promise<FeedItem[]> {
   // Pre-fetch verified astronomical data
-  const { lat, lng } = await geocodeCity(city);
-  const astro = getAstroData(lat, lng, new Date());
+  const { lat, lng, timezone } = await geocodeCity(city);
+  const astro = getAstroData(lat, lng, new Date(), timezone);
 
   const astroBlock = `## Verified Astronomical Data (from suncalc — use verbatim, do NOT hallucinate)
 - Moon phase: ${astro.moonPhase}
 - Moon illumination: ${astro.moonIllumination}%
-- Moonrise: ~${astro.moonrise} (approximate, server UTC)
-- Moonset: ~${astro.moonset} (approximate, server UTC)
-- Sunrise: ~${astro.sunrise} (approximate, server UTC)
-- Sunset: ~${astro.sunset} (approximate, server UTC)
-Note: rise/set times are approximate because they're computed in UTC. Present them as "around X" rather than exact.`;
+- Moonrise: ${astro.moonrise} (${timezone})
+- Moonset: ${astro.moonset} (${timezone})
+- Sunrise: ${astro.sunrise} (${timezone})
+- Sunset: ${astro.sunset} (${timezone})`;
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -71,14 +74,16 @@ Generate exactly 10 items spread across these categories:
 
 **Pick 1 from**: culture, food, community — for variety. Culture: a museum, gallery, or cultural institution worth visiting. Food: a seasonal ingredient or iconic local dish. Community: farmers markets, volunteer opportunities, neighborhood traditions.
 
-## Output Format
-Return ONLY a JSON array (no markdown, no wrapping) with 10 objects, each having:
-- "id": a short unique slug (e.g. "march-moon-phase")
-- "title": compelling headline (5-10 words)
-- "body": 2-3 sentences, specific and vivid
-- "category": one of "sky-space", "nature", "local-scene", "sports", "events", "earth-garden", "history", "culture", "food", "community"
-- "confidence": "high", "medium", or "low"
-- "imageQuery": a 2-4 word Pexels search query for a relevant photo (e.g. "full moon night", "seattle pike place", "cherry blossoms spring")
+## CRITICAL Output Rules
+- Return ONLY a JSON array (no markdown, no wrapping) with 10 objects
+- Do NOT include any HTML tags, citation tags, or markup in the JSON string values. Plain text only.
+- Each object must have:
+  - "id": a short unique slug (e.g. "march-moon-phase")
+  - "title": compelling headline (5-10 words)
+  - "body": 2-3 sentences, specific and vivid, plain text only
+  - "category": one of "sky-space", "nature", "local-scene", "sports", "events", "earth-garden", "history", "culture", "food", "community"
+  - "confidence": "high", "medium", or "low"
+  - "imageQuery": a 2-4 word Pexels search query for a relevant photo (e.g. "full moon night", "seattle pike place", "cherry blossoms spring")
 
 ## Tone
 Like a knowledgeable, curious local friend — warm, informative, grounded in the specific place and time. Never preachy or clickbait-y. When uncertain, be honest: "Worth checking..." is better than fabricating.`,
@@ -96,12 +101,23 @@ Like a knowledgeable, curious local friend — warm, informative, grounded in th
     }
   }
 
+  // Strip any citation markup that web search may have injected
+  text = stripCitations(text);
+
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error("Failed to parse feed items from Claude response");
   }
 
   let items = JSON.parse(jsonMatch[0]) as FeedItem[];
+
+  // Belt-and-suspenders: strip citations from individual fields too
+  items = items.map((item) => ({
+    ...item,
+    title: stripCitations(item.title),
+    body: stripCitations(item.body),
+  }));
+
   items = shuffle(items);
 
   return items;

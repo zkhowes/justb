@@ -17,25 +17,35 @@ function getPhaseName(phase: number): string {
   return PHASE_NAMES[idx];
 }
 
-function formatTime(date: Date): string {
+function formatTime(date: Date, timezone: string): string {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "UTC",
+    timeZone: timezone,
   });
 }
 
-export function getAstroData(lat: number, lng: number, date: Date) {
+export function getAstroData(
+  lat: number,
+  lng: number,
+  date: Date,
+  timezone: string
+) {
   const moonIllum = SunCalc.getMoonIllumination(date);
   const moonTimes = SunCalc.getMoonTimes(date, lat, lng);
   const sunTimes = SunCalc.getTimes(date, lat, lng);
 
   return {
+    timezone,
     moonPhase: getPhaseName(moonIllum.phase),
     moonIllumination: Math.round(moonIllum.fraction * 100),
-    moonrise: moonTimes.rise ? formatTime(moonTimes.rise) : "does not rise",
-    moonset: moonTimes.set ? formatTime(moonTimes.set) : "does not set",
-    sunrise: formatTime(sunTimes.sunrise),
-    sunset: formatTime(sunTimes.sunset),
+    moonrise: moonTimes.rise
+      ? formatTime(moonTimes.rise, timezone)
+      : "does not rise",
+    moonset: moonTimes.set
+      ? formatTime(moonTimes.set, timezone)
+      : "does not set",
+    sunrise: formatTime(sunTimes.sunrise, timezone),
+    sunset: formatTime(sunTimes.sunset, timezone),
   };
 }
