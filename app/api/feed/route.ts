@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateFeed } from "@/lib/generate-feed";
 
+export const maxDuration = 30;
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const city = searchParams.get("city");

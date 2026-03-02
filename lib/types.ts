@@ -2,7 +2,9 @@ export type Category =
   | "sky-space"
   | "nature"
   | "local-scene"
-  | "gardening"
+  | "sports"
+  | "events"
+  | "earth-garden"
   | "history"
   | "culture"
   | "food"
@@ -14,4 +16,6 @@ export type FeedItem = {
   body: string;
   category: Category;
   confidence: "high" | "medium" | "low";
+  imageQuery?: string;
+  imageUrl?: string;
 };

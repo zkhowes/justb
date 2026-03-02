@@ -3,11 +3,13 @@ import {
   Moon,
   Leaf,
   MapPin,
-  Sprout,
+  Mountain,
   Landmark,
   Palette,
   Utensils,
   Users,
+  Trophy,
+  Music,
   LucideIcon,
 } from "lucide-react";
 
@@ -33,11 +35,23 @@ const categoryConfig: Record<
     bg: "var(--cat-local-scene-bg)",
     icon: MapPin,
   },
-  gardening: {
-    label: "Gardening",
-    color: "var(--cat-gardening)",
-    bg: "var(--cat-gardening-bg)",
-    icon: Sprout,
+  sports: {
+    label: "Sports",
+    color: "var(--cat-sports)",
+    bg: "var(--cat-sports-bg)",
+    icon: Trophy,
+  },
+  events: {
+    label: "Events",
+    color: "var(--cat-events)",
+    bg: "var(--cat-events-bg)",
+    icon: Music,
+  },
+  "earth-garden": {
+    label: "Earth & Garden",
+    color: "var(--cat-earth-garden)",
+    bg: "var(--cat-earth-garden-bg)",
+    icon: Mountain,
   },
   history: {
     label: "History",
