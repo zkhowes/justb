@@ -7,7 +7,7 @@ export function FeedSkeleton() {
           className="bg-[var(--bg-card)] rounded-xl overflow-hidden"
           style={{ boxShadow: "var(--shadow)" }}
         >
-          <div className="skeleton h-44 w-full" />
+          <div className="skeleton h-24 w-full" />
           <div className="p-5 space-y-3">
             <div className="skeleton h-4 w-20" />
             <div className="skeleton h-5 w-3/4" />

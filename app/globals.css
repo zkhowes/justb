@@ -14,20 +14,20 @@
     0 2px 4px rgba(0, 0, 0, 0.04);
 
   /* Category colors */
-  --cat-history: #8b6914;
-  --cat-history-bg: #fef9e7;
+  --cat-sky-space: #3730a3;
+  --cat-sky-space-bg: #eef2ff;
   --cat-nature: #2d7a3a;
   --cat-nature-bg: #edf7ee;
-  --cat-weather: #2563a8;
-  --cat-weather-bg: #e8f2fc;
+  --cat-local-scene: #b45309;
+  --cat-local-scene-bg: #fffbeb;
+  --cat-gardening: #4d7c0f;
+  --cat-gardening-bg: #f7fee7;
+  --cat-history: #8b6914;
+  --cat-history-bg: #fef9e7;
   --cat-culture: #7c3aed;
   --cat-culture-bg: #f3eeff;
   --cat-food: #c2410c;
   --cat-food-bg: #fff3e8;
-  --cat-sports: #b91c1c;
-  --cat-sports-bg: #fde8e8;
-  --cat-music: #be185d;
-  --cat-music-bg: #fde8f0;
   --cat-community: #0d7377;
   --cat-community-bg: #e6f5f5;
 }
@@ -37,13 +37,6 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* Feed card image */
-.feed-card-image {
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  width: 100%;
 }
 
 /* Skeleton shimmer */

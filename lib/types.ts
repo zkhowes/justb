@@ -1,11 +1,11 @@
 export type Category =
-  | "history"
+  | "sky-space"
   | "nature"
-  | "weather"
+  | "local-scene"
+  | "gardening"
+  | "history"
   | "culture"
   | "food"
-  | "sports"
-  | "music"
   | "community";
 
 export type FeedItem = {
@@ -13,5 +13,5 @@ export type FeedItem = {
   title: string;
   body: string;
   category: Category;
-  imageQuery: string;
+  confidence: "high" | "medium" | "low";
 };

@@ -1,11 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, RefreshCw } from "lucide-react";
 import { FeedItem } from "@/lib/types";
 import { FeedCard } from "@/components/feed-card";
 import { FeedSkeleton } from "@/components/feed-skeleton";
+
+function getTimeOfDayGradient(): { gradient: string; isNight: boolean } {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 7) {
+    // Dawn
+    return { gradient: "from-amber-200 via-orange-100 to-transparent", isNight: false };
+  } else if (hour >= 7 && hour < 12) {
+    // Morning
+    return { gradient: "from-sky-200 via-blue-100 to-transparent", isNight: false };
+  } else if (hour >= 12 && hour < 17) {
+    // Afternoon
+    return { gradient: "from-sky-300 via-sky-100 to-transparent", isNight: false };
+  } else if (hour >= 17 && hour < 19) {
+    // Golden hour
+    return { gradient: "from-amber-300 via-orange-100 to-transparent", isNight: false };
+  } else if (hour >= 19 && hour < 21) {
+    // Dusk
+    return { gradient: "from-purple-300 via-lavender-100 via-violet-100 to-transparent", isNight: false };
+  } else {
+    // Night
+    return { gradient: "from-indigo-900 via-indigo-800/50 to-transparent", isNight: true };
+  }
+}
 
 export default function FeedPage() {
   const router = useRouter();
@@ -13,6 +37,8 @@ export default function FeedPage() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { gradient, isNight } = useMemo(() => getTimeOfDayGradient(), []);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -56,16 +82,41 @@ export default function FeedPage() {
   if (!city) return null;
 
   return (
-    <main className="min-h-screen pb-12">
-      <header className="sticky top-0 z-10 bg-[var(--bg)] border-b border-[var(--border)] px-4 py-4">
+    <main className="min-h-screen pb-12 relative">
+      {/* Time-of-day ambient gradient */}
+      <div
+        className={`absolute inset-x-0 top-0 h-[200px] bg-gradient-to-b ${gradient} pointer-events-none`}
+      />
+
+      <header
+        className={`sticky top-0 z-10 border-b border-[var(--border)] px-4 py-4 ${
+          isNight
+            ? "bg-indigo-950/95 backdrop-blur-sm"
+            : "bg-[var(--bg)]/95 backdrop-blur-sm"
+        }`}
+      >
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="font-serif text-xl font-bold">JustB</h1>
-            <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+            <h1
+              className={`font-serif text-xl font-bold ${
+                isNight ? "text-white" : ""
+              }`}
+            >
+              JustB
+            </h1>
+            <div
+              className={`flex items-center gap-1.5 text-xs ${
+                isNight ? "text-indigo-300" : "text-[var(--text-muted)]"
+              }`}
+            >
               <MapPin size={12} />
               <button
                 onClick={handleChangeCity}
-                className="hover:text-[var(--text-secondary)] transition-colors underline underline-offset-2"
+                className={`transition-colors underline underline-offset-2 ${
+                  isNight
+                    ? "hover:text-indigo-200"
+                    : "hover:text-[var(--text-secondary)]"
+                }`}
               >
                 {city}
               </button>
@@ -74,20 +125,30 @@ export default function FeedPage() {
           <button
             onClick={() => fetchFeed(city)}
             disabled={loading}
-            className="p-2 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
+            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+              isNight ? "hover:bg-indigo-900" : "hover:bg-white"
+            }`}
             title="Refresh feed"
           >
             <RefreshCw
               size={18}
               className={loading ? "animate-spin" : ""}
-              style={{ color: "var(--text-muted)" }}
+              style={{
+                color: isNight ? "#a5b4fc" : "var(--text-muted)",
+              }}
             />
           </button>
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 mt-6">
-        <p className="text-sm text-[var(--text-muted)] mb-6">{today}</p>
+      <div className="max-w-lg mx-auto px-4 mt-6 relative">
+        <p
+          className={`text-sm mb-6 ${
+            isNight ? "text-indigo-300" : "text-[var(--text-muted)]"
+          }`}
+        >
+          {today}
+        </p>
 
         {error && (
           <div className="text-center py-12 text-sm text-[var(--text-secondary)]">
