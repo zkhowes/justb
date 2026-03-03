@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, ArrowRight } from "lucide-react";
 
 const CITIES = [
   "Seattle, WA",
@@ -70,14 +70,32 @@ export function LocationInput({
             setShowSuggestions(true);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && filtered.length > 0) {
-              handleSubmit(filtered[0]);
+            if (e.key === "Enter") {
+              if (filtered.length > 0) {
+                handleSubmit(filtered[0]);
+              } else if (query.trim()) {
+                handleSubmit(query.trim());
+              }
             }
           }}
           onFocus={() => setShowSuggestions(true)}
           placeholder="Enter your city..."
-          className="w-full pl-10 pr-4 py-3 rounded-xl border border-[var(--border)] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-muted)] focus:ring-opacity-30 transition-shadow"
+          className="w-full pl-10 pr-10 py-3 rounded-xl border border-[var(--border)] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-muted)] focus:ring-opacity-30 transition-shadow"
         />
+        {query.trim() && (
+          <button
+            onClick={() => {
+              if (filtered.length > 0) {
+                handleSubmit(filtered[0]);
+              } else {
+                handleSubmit(query.trim());
+              }
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <ArrowRight size={16} />
+          </button>
+        )}
       </div>
       {showSuggestions && filtered.length > 0 && (
         <ul className="absolute top-full mt-2 w-full bg-white rounded-xl border border-[var(--border)] overflow-hidden z-10" style={{ boxShadow: "var(--shadow-hover)" }}>
