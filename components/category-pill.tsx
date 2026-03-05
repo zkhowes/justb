@@ -83,6 +83,7 @@ export { categoryConfig };
 
 export function CategoryPill({ category }: { category: Category }) {
   const config = categoryConfig[category];
+  if (!config) return null;
   const Icon = config.icon;
 
   return (
