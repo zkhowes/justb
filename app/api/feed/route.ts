@@ -23,7 +23,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const items = await generateFeed(city, date);
-    return NextResponse.json(items);
+    return NextResponse.json(items, {
+      headers: {
+        // Cache on CDN for 4 hours, stale-while-revalidate for 8
+        "Cache-Control": "public, s-maxage=14400, stale-while-revalidate=28800",
+      },
+    });
   } catch (error) {
     console.error("Feed generation error:", error);
     return NextResponse.json(

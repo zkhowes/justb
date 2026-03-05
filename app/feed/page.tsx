@@ -71,19 +71,53 @@ export default function FeedPage() {
       const imageMap: Record<string, string> = await res.json();
       if (Object.keys(imageMap).length === 0) return;
 
-      setItems((prev) =>
-        prev.map((item) =>
+      setItems((prev) => {
+        const updated = prev.map((item) =>
           imageMap[item.id] ? { ...item, imageUrl: imageMap[item.id] } : item
-        )
-      );
+        );
+        // Persist images to cache
+        if (city) {
+          try {
+            localStorage.setItem(getCacheKey(city), JSON.stringify(updated));
+          } catch {
+            // Storage full — ignore
+          }
+        }
+        return updated;
+      });
     } catch {
       // Images are optional — fail silently
     }
   }
 
-  async function fetchFeed(cityName: string) {
+  function getCacheKey(cityName: string) {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return `justb-feed:${cityName.toLowerCase().trim()}:${dateStr}`;
+  }
+
+  async function fetchFeed(cityName: string, forceRefresh = false) {
     setLoading(true);
     setError(null);
+
+    // Check localStorage cache first (unless force refresh)
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(getCacheKey(cityName));
+        if (cached) {
+          const data: FeedItem[] = JSON.parse(cached);
+          setItems(data);
+          setLoading(false);
+          // Still fetch images if missing
+          if (data.some((i) => i.imageQuery && !i.imageUrl)) {
+            fetchImages(data);
+          }
+          return;
+        }
+      } catch {
+        // Cache miss or parse error — continue to fetch
+      }
+    }
+
     try {
       const res = await fetch(
         `/api/feed?city=${encodeURIComponent(cityName)}`
@@ -91,6 +125,12 @@ export default function FeedPage() {
       if (!res.ok) throw new Error("Failed to fetch feed");
       const data: FeedItem[] = await res.json();
       setItems(data);
+      // Cache the feed in localStorage
+      try {
+        localStorage.setItem(getCacheKey(cityName), JSON.stringify(data));
+      } catch {
+        // Storage full — ignore
+      }
       // Fire-and-forget: fetch images after cards are rendered
       fetchImages(data);
     } catch {
@@ -149,7 +189,7 @@ export default function FeedPage() {
             </div>
           </div>
           <button
-            onClick={() => fetchFeed(city)}
+            onClick={() => fetchFeed(city, true)}
             disabled={loading}
             className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
               isNight ? "hover:bg-indigo-900" : "hover:bg-white"

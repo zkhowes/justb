@@ -16,82 +16,58 @@ function stripCitations(text: string): string {
   return text.replace(/<\/?cite[^>]*>/g, "");
 }
 
+// In-memory cache: city+date -> feed items
+const feedCache = new Map<string, { items: FeedItem[]; timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours
+
 export async function generateFeed(
   city: string,
   date: string
 ): Promise<FeedItem[]> {
-  // Pre-fetch verified astronomical data
+  const cacheKey = `${city.toLowerCase().trim()}:${date}`;
+  const cached = feedCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    // Return shuffled copy so order varies on refresh
+    return shuffle([...cached.items]);
+  }
+
   const { lat, lng, timezone } = await geocodeCity(city);
   const astro = getAstroData(lat, lng, new Date(), timezone);
 
-  const astroBlock = `## Verified Astronomical Data (from suncalc — use verbatim, do NOT hallucinate)
-- Moon phase: ${astro.moonPhase}
-- Moon illumination: ${astro.moonIllumination}%
-- Moonrise: ${astro.moonrise} (${timezone})
-- Moonset: ${astro.moonset} (${timezone})
-- Sunrise: ${astro.sunrise} (${timezone})
-- Sunset: ${astro.sunset} (${timezone})`;
-
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2048,
     tools: [
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: 5,
+        max_uses: 3,
       },
     ],
     messages: [
       {
         role: "user",
-        content: `Generate a daily feed of 10 locally relevant items for ${city} on ${date}.
+        content: `Daily feed for ${city} on ${date}. Return ONLY a JSON array of 10 objects, no markdown.
 
-${astroBlock}
+Verified astro data (use verbatim): Moon: ${astro.moonPhase}, ${astro.moonIllumination}% illumination. Moonrise ${astro.moonrise}, moonset ${astro.moonset}. Sunrise ${astro.sunrise}, sunset ${astro.sunset} (${timezone}).
 
-## Date & Knowledge Rules
-- Today's date is ${date}.
-- You have access to a web search tool. Use it for sports schedules and local events/music.
-- For astronomical data, use ONLY the verified data above. Do NOT make up moon phases or sunrise/sunset times.
-- Set "confidence" to "low" for any item that references a specific event, game, or time-sensitive detail you cannot verify. Use "high" for verified astronomical data and general seasonal knowledge. Use "medium" for things that are very likely true but not guaranteed.
+Categories (exact counts): sky-space(2), nature(2), local-scene(1), sports(1), events(1), earth-garden(1), history(1), pick 1 from culture/food/community.
 
-## Categories & Item Counts
-Generate exactly 10 items spread across these categories:
+Rules:
+- Web search for sports schedules and local events/music only
+- Use verified astro data above for sky items, don't hallucinate
+- Be specific to ${city}'s region, season, and ecology
+- Sports: consolidate all games today into ONE item. Name real teams/opponents.
+- Events: name real venues and performers
+- "confidence": "high" for verified astro, "medium" for seasonal/general, "low" for specific events/times
 
-**sky-space** (2 items): Use the verified astronomical data above for moon phase, illumination, and rise/set times. Also include visible planets or constellations for the season. Astronomical facts from the verified data are high-confidence.
+Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences, plain text","category":"...","confidence":"...","imageQuery":"2-4 word photo search that will find a RELEVANT photo, be specific (e.g. 'waxing crescent moon' not 'moon', 'portland japanese garden' not 'garden')"}
 
-**nature** (2 items): Birds migrating through or resident in the area this time of year, insects/wildlife active now, wildflowers or trees blooming. Be specific to the region and season.
-
-**local-scene** (1 item): Real neighborhoods, venues, parks, and landmarks — go beyond the top-2 tourist spots. Reference real places.
-
-**sports** (1 item): Search the web for today's professional sports schedule in ${city}. Consolidate ALL games happening today into ONE entry. If no games today, mention the next upcoming game or current season status. Always name real teams and real opponents.
-
-**events** (1 item): Search the web for events and live music happening today/tonight in ${city}. Name real venues and real acts/performers. If you find specific events, list 2-3 of the best ones.
-
-**earth-garden** (1 item): Either a gardening tip (what to plant, prune, harvest for the region's climate and season) OR a geology/landscape fact (how a local landform was created, interesting rocks/minerals in the area, volcanic/glacial history). Alternate between gardening and geology.
-
-**history** (1 item): A real historical fact tied to ${city} — include indigenous peoples and their relationship to the land, early European explorers, significant regional events, or "on this day" facts. Go beyond well-known history.
-
-**Pick 1 from**: culture, food, community — for variety. Culture: a museum, gallery, or cultural institution worth visiting. Food: a seasonal ingredient or iconic local dish. Community: farmers markets, volunteer opportunities, neighborhood traditions.
-
-## CRITICAL Output Rules
-- Return ONLY a JSON array (no markdown, no wrapping) with 10 objects
-- Do NOT include any HTML tags, citation tags, or markup in the JSON string values. Plain text only.
-- Each object must have:
-  - "id": a short unique slug (e.g. "march-moon-phase")
-  - "title": compelling headline (5-10 words)
-  - "body": 2-3 sentences, specific and vivid, plain text only
-  - "category": one of "sky-space", "nature", "local-scene", "sports", "events", "earth-garden", "history", "culture", "food", "community"
-  - "confidence": "high", "medium", or "low"
-  - "imageQuery": a 2-4 word Pexels search query for a relevant photo (e.g. "full moon night", "seattle pike place", "cherry blossoms spring")
-
-## Tone
-Like a knowledgeable, curious local friend — warm, informative, grounded in the specific place and time. Never preachy or clickbait-y. When uncertain, be honest: "Worth checking..." is better than fabricating.`,
+Tone: knowledgeable local friend, warm, specific. No HTML/citation tags in values.`,
       },
     ],
   });
 
-  // Web search produces interleaved text/tool blocks — extract JSON from last text block
   let text = "";
   for (let i = message.content.length - 1; i >= 0; i--) {
     const block = message.content[i];
@@ -101,7 +77,6 @@ Like a knowledgeable, curious local friend — warm, informative, grounded in th
     }
   }
 
-  // Strip any citation markup that web search may have injected
   text = stripCitations(text);
 
   const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -111,14 +86,14 @@ Like a knowledgeable, curious local friend — warm, informative, grounded in th
 
   let items = JSON.parse(jsonMatch[0]) as FeedItem[];
 
-  // Belt-and-suspenders: strip citations from individual fields too
   items = items.map((item) => ({
     ...item,
     title: stripCitations(item.title),
     body: stripCitations(item.body),
   }));
 
-  items = shuffle(items);
+  // Cache the canonical order
+  feedCache.set(cacheKey, { items, timestamp: Date.now() });
 
-  return items;
+  return shuffle(items);
 }
