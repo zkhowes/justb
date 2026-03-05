@@ -1,6 +1,5 @@
 import { anthropic } from "./anthropic";
-import { geocodeCity } from "./geocode";
-import { getAstroData } from "./astro";
+import { gatherAllMoments, MomentContext } from "./moments";
 import { FeedItem } from "./types";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -12,13 +11,15 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function stripCitations(text: string): string {
-  return text.replace(/<\/?cite[^>]*>/g, "");
-}
-
 // In-memory cache: city+date -> feed items
 const feedCache = new Map<string, { items: FeedItem[]; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours
+
+function formatMomentsForPrompt(moments: MomentContext[]): string {
+  return moments
+    .map((m) => `[${m.category}] (source: ${m.source})\n${m.data}`)
+    .join("\n\n");
+}
 
 export async function generateFeed(
   city: string,
@@ -27,72 +28,67 @@ export async function generateFeed(
   const cacheKey = `${city.toLowerCase().trim()}:${date}`;
   const cached = feedCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    // Return shuffled copy so order varies on refresh
     return shuffle([...cached.items]);
   }
 
-  const { lat, lng, timezone } = await geocodeCity(city);
-  const astro = getAstroData(lat, lng, new Date(), timezone);
+  // 1. Gather structured data from all moment providers (APIs, suncalc, etc.)
+  const { loc, moments } = await gatherAllMoments(city, date);
+  const momentData = formatMomentsForPrompt(moments);
 
+  // 2. Determine which categories already have API data
+  const coveredCategories = new Set(moments.map((m) => m.category));
+  const llmOnlyCategories: string[] = [];
+  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(2): birds, wildlife, wildflowers specific to region and season");
+  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): real neighborhood, park, or landmark beyond tourist spots");
+  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): gardening tip or geology fact for the region");
+  if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition");
+
+  // 3. Send to Claude — NO web search, just prose generation
   const message = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 2048,
-    tools: [
-      {
-        type: "web_search_20250305",
-        name: "web_search",
-        max_uses: 3,
-      },
-    ],
     messages: [
       {
         role: "user",
-        content: `Daily feed for ${city} on ${date}. Return ONLY a JSON array of 10 objects, no markdown.
+        content: `Write a daily feed of 10 items for ${city} on ${date} (timezone: ${loc.timezone}). Return ONLY a JSON array, no markdown.
 
-Verified astro data (use verbatim): Moon: ${astro.moonPhase}, ${astro.moonIllumination}% illumination. Moonrise ${astro.moonrise}, moonset ${astro.moonset}. Sunrise ${astro.sunrise}, sunset ${astro.sunset} (${timezone}).
+## Structured data from APIs (use this verbatim for these categories):
+${momentData}
 
-Categories (exact counts): sky-space(2), nature(2), local-scene(1), sports(1), events(1), earth-garden(1), history(1), pick 1 from culture/food/community.
+## Categories you must generate from your knowledge:
+${llmOnlyCategories.join("\n")}
 
-Rules:
-- Web search for sports schedules and local events/music only
-- Use verified astro data above for sky items, don't hallucinate
-- Be specific to ${city}'s region, season, and ecology
-- Sports: consolidate all games today into ONE item. Name real teams/opponents.
-- Events: name real venues and performers
-- "confidence": "high" for verified astro, "medium" for seasonal/general, "low" for specific events/times
+## Rules
+- For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
+- sky-space gets 2 items (one moon/sun from the data, one about visible planets/constellations for the season)
+- sports gets 1 item: consolidate the game data into one engaging summary
+- events gets 1 item: pick the 2-3 best events and highlight them
+- history gets 1 item: use the on-this-day data, tie it to ${city} if possible
+- If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
+- Total: exactly 10 items
 
-Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences, plain text","category":"...","confidence":"...","imageQuery":"2-4 word photo search that will find a RELEVANT photo, be specific (e.g. 'waxing crescent moon' not 'moon', 'portland japanese garden' not 'garden')"}
+Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search (e.g. 'waxing crescent moon' not 'moon', 'portland japanese garden' not 'garden')"}
 
-Tone: knowledgeable local friend, warm, specific. No HTML/citation tags in values.`,
+Tone: knowledgeable local friend. No HTML tags.`,
       },
     ],
   });
 
   let text = "";
-  for (let i = message.content.length - 1; i >= 0; i--) {
-    const block = message.content[i];
+  for (const block of message.content) {
     if (block.type === "text") {
       text = block.text;
       break;
     }
   }
 
-  text = stripCitations(text);
-
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error("Failed to parse feed items from Claude response");
   }
 
-  let items = JSON.parse(jsonMatch[0]) as FeedItem[];
+  const items = JSON.parse(jsonMatch[0]) as FeedItem[];
 
-  items = items.map((item) => ({
-    ...item,
-    title: stripCitations(item.title),
-    body: stripCitations(item.body),
-  }));
-
-  // Cache the canonical order
   feedCache.set(cacheKey, { items, timestamp: Date.now() });
 
   return shuffle(items);
