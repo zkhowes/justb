@@ -38,9 +38,9 @@ export async function generateFeed(
   // 2. Determine which categories already have API data
   const coveredCategories = new Set(moments.map((m) => m.category));
   const llmOnlyCategories: string[] = [];
-  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(2): birds, wildlife, wildflowers specific to region and season");
-  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): real neighborhood, park, or landmark beyond tourist spots");
-  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): gardening tip or geology fact for the region");
+  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(2): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region.");
+  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through lesser-known spots.");
+  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days.");
   if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition");
 
   // 3. Send to Claude — NO web search, just prose generation
@@ -63,11 +63,11 @@ ${llmOnlyCategories.join("\n")}
 - sky-space gets 2 items (one moon/sun from the data, one about visible planets/constellations for the season)
 - sports gets 1 item: consolidate the game data into one engaging summary
 - events gets 1 item: pick the 2-3 best events and highlight them
-- history gets 1 item: use the on-this-day data, tie it to ${city} if possible
+- history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge of a historical event tied to ${city} and this date or time of year. Include indigenous history when relevant.
 - If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
 - Total: exactly 10 items
 
-Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search (e.g. 'waxing crescent moon' not 'moon', 'portland japanese garden' not 'garden')"}
+Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search that matches the EXACT place/subject in your body text (e.g. 'fremont troll sculpture' not 'seattle market', 'daffodils blooming garden' not 'flowers'). NEVER use a famous landmark as imageQuery unless the body is actually about that landmark."}
 
 Tone: knowledgeable local friend. No HTML tags.`,
       },

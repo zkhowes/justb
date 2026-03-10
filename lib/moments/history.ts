@@ -40,13 +40,35 @@ export async function fetchHistoryMoments(
       return fallback(loc);
     }
 
-    // Pick 3 interesting events, spread across eras
-    const sorted = events.sort((a, b) => a.year - b.year);
-    const picks = [
-      sorted[0],
-      sorted[Math.floor(sorted.length / 2)],
-      sorted[sorted.length - 1],
-    ].filter(Boolean);
+    // Prefer events with a geographic connection to the user's city/region
+    const cityLower = loc.city.toLowerCase();
+    const localEvents = events.filter((e) => {
+      const text = e.text.toLowerCase();
+      const pageNames = e.pages.map((p) => p.title.toLowerCase()).join(" ");
+      const combined = `${text} ${pageNames}`;
+      return combined.includes(cityLower) ||
+        combined.includes(loc.city.split(",")[0].trim().toLowerCase());
+    });
+
+    // Pick events: prioritize local, fill with spread across eras
+    let picks: WikiEvent[];
+    if (localEvents.length > 0) {
+      // Lead with local events, pad with global spread
+      const globalSorted = events
+        .filter((e) => !localEvents.includes(e))
+        .sort((a, b) => a.year - b.year);
+      picks = [
+        ...localEvents.slice(0, 2),
+        ...(globalSorted.length > 0 ? [globalSorted[Math.floor(globalSorted.length / 2)]] : []),
+      ].filter(Boolean).slice(0, 3);
+    } else {
+      const sorted = events.sort((a, b) => a.year - b.year);
+      picks = [
+        sorted[0],
+        sorted[Math.floor(sorted.length / 2)],
+        sorted[sorted.length - 1],
+      ].filter(Boolean);
+    }
 
     const lines = picks.map(
       (e) => `${e.year}: ${e.text}`
@@ -56,7 +78,7 @@ export async function fetchHistoryMoments(
       {
         category: "history",
         source: "wikimedia",
-        data: `On this day (${loc.date}):\n${lines.join("\n")}\n\nUse one of these facts, ideally tying it to ${loc.city} or the region if possible.`,
+        data: `On this day (${loc.date}):\n${lines.join("\n")}\n\nSTRONGLY prefer a fact with a direct connection to ${loc.city} or its region. If none connect, use your own knowledge of local history for this date.`,
       },
     ];
   } catch {
