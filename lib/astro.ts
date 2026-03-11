@@ -12,8 +12,10 @@ const PHASE_NAMES = [
 ] as const;
 
 function getPhaseName(phase: number): string {
-  // phase is 0..1, divide into 8 segments
-  const idx = Math.round(phase * 8) % 8;
+  // phase is 0..1; floor into 8 equal segments so transitional phases
+  // (crescent/gibbous) span the full range between cardinal points
+  // (new → 0, first-quarter → 0.25, full → 0.5, last-quarter → 0.75)
+  const idx = Math.floor(phase * 8) % 8;
   return PHASE_NAMES[idx];
 }
 
@@ -25,15 +27,33 @@ function formatTime(date: Date, timezone: string): string {
   });
 }
 
+/** Return a Date representing midnight local time (as UTC instant) for the given IANA timezone. */
+function startOfLocalDay(date: Date, timezone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)!.value);
+  const elapsedMs = (get("hour") * 3600 + get("minute") * 60 + get("second")) * 1000;
+  return new Date(date.getTime() - elapsedMs);
+}
+
 export function getAstroData(
   lat: number,
   lng: number,
   date: Date,
   timezone: string
 ) {
-  const moonIllum = SunCalc.getMoonIllumination(date);
-  const moonTimes = SunCalc.getMoonTimes(date, lat, lng);
-  const sunTimes = SunCalc.getTimes(date, lat, lng);
+  // Use start of local day for all calculations so the search window matches
+  // the user's calendar day and phase/illumination match weather services.
+  const dayStart = startOfLocalDay(date, timezone);
+
+  const moonIllum = SunCalc.getMoonIllumination(dayStart);
+  const moonTimes = SunCalc.getMoonTimes(dayStart, lat, lng);
+  const sunTimes = SunCalc.getTimes(dayStart, lat, lng);
 
   return {
     timezone,
