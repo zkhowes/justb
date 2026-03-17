@@ -23,7 +23,8 @@ function formatMomentsForPrompt(moments: MomentContext[]): string {
 
 export async function generateFeed(
   city: string,
-  date: string
+  date: string,
+  recentTopics?: string[]
 ): Promise<{ items: FeedItem[]; glyphs: GlyphData }> {
   const cacheKey = `${city.toLowerCase().trim()}:${date}`;
   const cached = feedCache.get(cacheKey);
@@ -38,10 +39,10 @@ export async function generateFeed(
   // 2. Determine which categories already have API data
   const coveredCategories = new Set(moments.map((m) => m.category));
   const llmOnlyCategories: string[] = [];
-  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(3): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region.");
-  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through lesser-known spots.");
-  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days.");
-  if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition");
+  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(3): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region. Skip if nothing specific to this week/season/place.");
+  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through a variety of neighborhoods, parks, and local institutions — only feature the city's most famous landmark if something specific and timely is happening there. Skip if nothing specific to this week/season/place.");
+  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days. Skip if nothing specific to this week/season/place.");
+  if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition. Skip if nothing specific to this week/season/place.");
 
   // 3. Send to Claude — NO web search, just prose generation
   const message = await anthropic.messages.create({
@@ -50,7 +51,7 @@ export async function generateFeed(
     messages: [
       {
         role: "user",
-        content: `Write a daily feed of 10 items for ${city} on ${date} (timezone: ${loc.timezone}). Return ONLY a JSON array, no markdown.
+        content: `Write a daily feed for ${city} on ${date} (timezone: ${loc.timezone}). Return ONLY a JSON array, no markdown.
 
 ## Structured data from APIs (use this verbatim for these categories):
 ${momentData}
@@ -61,11 +62,12 @@ ${llmOnlyCategories.join("\n")}
 ## Rules
 - For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
 - sky-space gets 1 item about visible planets, constellations, stars, or galaxies for the season and location. Do NOT mention moon phase or sunrise/sunset times (those are shown separately in the UI).
-- sports gets 1 item: consolidate the game data into one engaging summary
-- events gets 1 item: pick the 2-3 best events and highlight them
+- sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
+- events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
 - history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge of a historical event tied to ${city} and this date or time of year. Include indigenous history when relevant.
 - If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
-- Total: exactly 10 items
+- Aim for 10 items, but only include what's genuinely relevant — fewer is fine. Do not pad with generic filler.
+${recentTopics && recentTopics.length > 0 ? `\n## Recently covered topics (vary your coverage, avoid repeating these):\n${recentTopics.join(", ")}` : ""}
 
 Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search that matches the EXACT place/subject in your body text (e.g. 'fremont troll sculpture' not 'seattle market', 'daffodils blooming garden' not 'flowers'). NEVER use a famous landmark as imageQuery unless the body is actually about that landmark."}
 

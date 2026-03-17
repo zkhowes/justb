@@ -155,12 +155,6 @@ export async function fetchEventMoments(
       source: "ticketmaster+seatgeek",
       data: `Live events near ${loc.city} on ${loc.date}:\n${musicEvents.slice(0, 8).join("\n")}`,
     });
-  } else {
-    moments.push({
-      category: "events",
-      source: "ticketmaster+seatgeek",
-      data: `No major ticketed events found near ${loc.city} for ${loc.date}. Mention that it's a quiet night or suggest checking local venue calendars.`,
-    });
   }
 
   if (cultureEvents.length > 0) {

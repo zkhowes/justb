@@ -10,6 +10,8 @@ import { LocationInput } from "@/components/location-input";
 import { BreathingExercise } from "@/components/breathing-exercise";
 import { Glyphs } from "@/components/glyphs";
 
+const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
+
 type Phase = "location" | "ready" | "breathing" | "waiting" | "feed";
 
 function getTimeOfDayGradient(): { gradient: string; isNight: boolean } {
@@ -35,6 +37,30 @@ function getCacheKey(cityName: string) {
   return `justb-feed:${cityName.toLowerCase().trim()}:${dateStr}`;
 }
 
+function getRecentTopics(cityName: string): string[] {
+  const topics: string[] = [];
+  const today = new Date();
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = `justb-feed:${cityName.toLowerCase().trim()}:${d.toISOString().slice(0, 10)}`;
+    try {
+      const cached = localStorage.getItem(key);
+      if (!cached) continue;
+      const parsed = JSON.parse(cached);
+      const items: FeedItem[] = Array.isArray(parsed) ? parsed : parsed.items;
+      if (items) {
+        for (const item of items) {
+          if (item.title) topics.push(item.title);
+        }
+      }
+    } catch {
+      // Skip corrupted cache entries
+    }
+  }
+  return topics;
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("location");
   const [city, setCity] = useState<string | null>(null);
@@ -45,6 +71,9 @@ export default function Home() {
 
   const feedDataRef = useRef<{ items: FeedItem[]; glyphs: GlyphData } | null>(null);
   const feedErrorRef = useRef<string | null>(null);
+  const sessionDbIdRef = useRef<number | null>(null);
+  const maxCardsViewedRef = useRef(0);
+  const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const { gradient, isNight } = useMemo(() => getTimeOfDayGradient(), []);
 
@@ -63,6 +92,62 @@ export default function Home() {
       setPhase("ready");
     }
   }, []);
+
+  // Session tracking + scroll observer (preview mode only)
+  useEffect(() => {
+    if (!isPreview || phase !== "feed" || items.length === 0 || !city) return;
+
+    // Track session
+    async function startSession() {
+      try {
+        const { trackSession } = await import("@/lib/tracking");
+        const id = await trackSession(city!, items.length);
+        sessionDbIdRef.current = id;
+      } catch {
+        // noop
+      }
+    }
+    startSession();
+
+    // IntersectionObserver for scroll depth
+    maxCardsViewedRef.current = 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = Number(entry.target.getAttribute("data-card-index"));
+            if (!isNaN(idx) && idx + 1 > maxCardsViewedRef.current) {
+              maxCardsViewedRef.current = idx + 1;
+            }
+          }
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    // Observe all card elements
+    const cards = document.querySelectorAll("[data-card-index]");
+    cards.forEach((card) => observer.observe(card));
+
+    // Send scroll depth on unload
+    function handleUnload() {
+      if (sessionDbIdRef.current && maxCardsViewedRef.current > 0) {
+        import("@/lib/tracking").then(({ trackScrollDepth }) => {
+          trackScrollDepth(
+            sessionDbIdRef.current!,
+            maxCardsViewedRef.current,
+            items.length
+          );
+        });
+      }
+    }
+    window.addEventListener("beforeunload", handleUnload);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [phase, items.length, city]);
 
   // --- Feed fetching ---
 
@@ -119,7 +204,12 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch(`/api/feed?city=${encodeURIComponent(cityName)}`);
+      const recentTopics = getRecentTopics(cityName);
+      const params = new URLSearchParams({ city: cityName });
+      if (recentTopics.length > 0) {
+        params.set("recentTopics", recentTopics.join(","));
+      }
+      const res = await fetch(`/api/feed?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
       const data: { items: FeedItem[]; glyphs: GlyphData } = await res.json();
       try {
@@ -139,7 +229,12 @@ export default function Home() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/feed?city=${encodeURIComponent(cityName)}`);
+      const recentTopics = getRecentTopics(cityName);
+      const params = new URLSearchParams({ city: cityName });
+      if (recentTopics.length > 0) {
+        params.set("recentTopics", recentTopics.join(","));
+      }
+      const res = await fetch(`/api/feed?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
       const data: { items: FeedItem[]; glyphs: GlyphData } = await res.json();
       setItems(data.items);
@@ -364,7 +459,9 @@ export default function Home() {
         ) : (
           <div className="space-y-6">
             {items.map((item, i) => (
-              <FeedCard key={item.id} item={item} index={i} />
+              <div key={item.id} data-card-index={i}>
+                <FeedCard item={item} index={i} city={city || undefined} />
+              </div>
             ))}
           </div>
         )}

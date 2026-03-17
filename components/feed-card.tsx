@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Check, X, AlertTriangle } from "lucide-react";
 import { FeedItem, Category } from "@/lib/types";
 import { CategoryPill, categoryConfig } from "./category-pill";
+
+const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
 const gradients: Record<Category, string> = {
   "sky-space": "from-indigo-900 to-indigo-700",
@@ -18,7 +21,70 @@ const gradients: Record<Category, string> = {
   community: "from-teal-700 to-teal-500",
 };
 
-export function FeedCard({ item, index }: { item: FeedItem; index: number }) {
+type Rating = "good" | "irrelevant" | "inaccurate";
+
+function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
+  const [selected, setSelected] = useState<Rating | null>(null);
+
+  async function handleRate(rating: Rating) {
+    if (selected) return;
+    setSelected(rating);
+    try {
+      await fetch("/api/preview/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          city,
+          category: item.category,
+          itemId: item.id,
+          title: item.title,
+          body: item.body,
+          rating,
+        }),
+      });
+    } catch {
+      // Best effort
+    }
+  }
+
+  const buttons: { rating: Rating; icon: typeof Check; color: string; activeColor: string }[] = [
+    { rating: "good", icon: Check, color: "text-[var(--text-muted)]", activeColor: "text-emerald-500" },
+    { rating: "irrelevant", icon: X, color: "text-[var(--text-muted)]", activeColor: "text-amber-500" },
+    { rating: "inaccurate", icon: AlertTriangle, color: "text-[var(--text-muted)]", activeColor: "text-red-500" },
+  ];
+
+  return (
+    <div className="flex items-center gap-1 pt-3 border-t border-[var(--border)]/50">
+      {buttons.map(({ rating, icon: Icon, color, activeColor }) => (
+        <button
+          key={rating}
+          onClick={() => handleRate(rating)}
+          className={`p-1.5 rounded-lg transition-all ${
+            selected === rating
+              ? activeColor
+              : selected
+                ? "opacity-30 " + color
+                : color + " hover:bg-[var(--border)]/30"
+          }`}
+          title={rating}
+          disabled={!!selected}
+        >
+          <Icon size={14} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function FeedCard({
+  item,
+  index,
+  city,
+}: {
+  item: FeedItem;
+  index: number;
+  city?: string;
+}) {
   const Icon = categoryConfig[item.category]?.icon;
   const gradient = gradients[item.category] || "from-gray-700 to-gray-500";
 
@@ -82,6 +148,7 @@ export function FeedCard({ item, index }: { item: FeedItem; index: number }) {
         >
           {item.body}
         </p>
+        {isPreview && city && <FeedbackRow item={item} city={city} />}
       </div>
     </motion.article>
   );

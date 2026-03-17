@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
       month: "long",
       day: "numeric",
     });
+  const recentTopicsParam = searchParams.get("recentTopics");
+  const recentTopics = recentTopicsParam
+    ? recentTopicsParam.split(",").map((t) => t.trim()).filter(Boolean)
+    : undefined;
 
   if (!city) {
     return NextResponse.json(
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { items, glyphs } = await generateFeed(city, date);
+    const { items, glyphs } = await generateFeed(city, date, recentTopics);
     return NextResponse.json({ items, glyphs }, {
       headers: {
         // Cache on CDN for 4 hours, stale-while-revalidate for 8

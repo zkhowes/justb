@@ -104,18 +104,13 @@ export async function fetchSportsMoments(
     }
   });
 
-  if (localGames.length === 0 && allGames.length === 0) {
-    return [
-      {
-        category: "sports",
-        source: "espn",
-        data: `No major professional sports games found for ${loc.date}. Mention the current season status or next upcoming games for teams near ${loc.city}.`,
-      },
-    ];
+  // Only return a moment when there are local games
+  if (localGames.length === 0) {
+    return [];
   }
 
-  const games = localGames.length > 0 ? localGames : allGames.slice(0, 5);
-  const locality = localGames.length > 0 ? "Local games" : "Notable games today (none local)";
+  const games = localGames;
+  const locality = "Local games";
 
   return [
     {

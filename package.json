@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@neondatabase/serverless": "^1.0.2",
     "@types/suncalc": "^1.9.2",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.575.0",
