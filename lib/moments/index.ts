@@ -15,7 +15,12 @@ export async function gatherAllMoments(
   date: string
 ): Promise<{ loc: LocationContext; moments: MomentContext[]; glyphs: GlyphData }> {
   const { lat, lng, timezone } = await geocodeCity(city);
-  const dateISO = new Date().toISOString().slice(0, 10);
+  // Derive dateISO from the date parameter (e.g. "March 17, 2026") rather than
+  // server clock, which runs UTC on Vercel and can drift from the user's local date
+  const parsed = new Date(date);
+  const dateISO = isNaN(parsed.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : parsed.toISOString().slice(0, 10);
 
   const loc: LocationContext = { city, lat, lng, timezone, date, dateISO };
 

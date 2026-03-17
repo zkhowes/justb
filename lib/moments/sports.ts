@@ -63,7 +63,7 @@ function isLocalGame(event: ESPNEvent, city: string): boolean {
   return false;
 }
 
-function formatEvent(event: ESPNEvent, league: string): string {
+function formatEvent(event: ESPNEvent, league: string, timezone: string): string {
   const comp = event.competitions[0];
   if (!comp) return "";
   const home = comp.competitors.find((c) => c.homeAway === "home");
@@ -74,6 +74,7 @@ function formatEvent(event: ESPNEvent, league: string): string {
   const time = new Date(event.date).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: timezone,
   });
   let line = `${league}: ${away.team.displayName} at ${home.team.displayName}, ${time}, ${venue}`;
   if (broadcast) line += ` (${broadcast})`;
@@ -95,7 +96,7 @@ export async function fetchSportsMoments(
   results.forEach((result, i) => {
     if (result.status !== "fulfilled") return;
     for (const event of result.value) {
-      const formatted = formatEvent(event, LEAGUES[i].label);
+      const formatted = formatEvent(event, LEAGUES[i].label, loc.timezone);
       if (!formatted) continue;
       allGames.push(formatted);
       if (isLocalGame(event, loc.city)) {

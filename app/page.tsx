@@ -205,7 +205,8 @@ export default function Home() {
 
     try {
       const recentTopics = getRecentTopics(cityName);
-      const params = new URLSearchParams({ city: cityName });
+      const localDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      const params = new URLSearchParams({ city: cityName, date: localDate });
       if (recentTopics.length > 0) {
         params.set("recentTopics", recentTopics.join(","));
       }
@@ -230,7 +231,8 @@ export default function Home() {
 
     try {
       const recentTopics = getRecentTopics(cityName);
-      const params = new URLSearchParams({ city: cityName });
+      const localDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      const params = new URLSearchParams({ city: cityName, date: localDate });
       if (recentTopics.length > 0) {
         params.set("recentTopics", recentTopics.join(","));
       }

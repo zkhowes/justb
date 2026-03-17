@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Preview mode disabled" }, { status: 403 });
   }
 
-  const { city, category, itemId, title, body, rating } = await request.json();
+  const { city, category, itemId, title, body, rating, reason } = await request.json();
 
   if (!city || !category || !itemId || !title || !rating) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
 
   const sql = getSql();
   await sql`
-    INSERT INTO feedback (city, category, item_id, title, body, rating)
-    VALUES (${city}, ${category}, ${itemId}, ${title}, ${body || null}, ${rating})
+    INSERT INTO feedback (city, category, item_id, title, body, rating, reason)
+    VALUES (${city}, ${category}, ${itemId}, ${title}, ${body || null}, ${rating}, ${reason || null})
   `;
 
   return NextResponse.json({ ok: true });

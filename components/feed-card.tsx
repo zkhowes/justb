@@ -23,12 +23,19 @@ const gradients: Record<Category, string> = {
 
 type Rating = "good" | "irrelevant" | "inaccurate";
 
+const INACCURACY_REASONS = [
+  "Wrong time/date",
+  "Wrong facts",
+  "Not my city",
+  "Other",
+] as const;
+
 function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
   const [selected, setSelected] = useState<Rating | null>(null);
+  const [showReasons, setShowReasons] = useState(false);
+  const [reasonPicked, setReasonPicked] = useState(false);
 
-  async function handleRate(rating: Rating) {
-    if (selected) return;
-    setSelected(rating);
+  async function sendFeedback(rating: Rating, reason?: string) {
     try {
       await fetch("/api/preview/feedback", {
         method: "POST",
@@ -40,11 +47,29 @@ function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
           title: item.title,
           body: item.body,
           rating,
+          reason,
         }),
       });
     } catch {
       // Best effort
     }
+  }
+
+  function handleRate(rating: Rating) {
+    if (selected) return;
+    if (rating === "inaccurate") {
+      setSelected(rating);
+      setShowReasons(true);
+      return;
+    }
+    setSelected(rating);
+    sendFeedback(rating);
+  }
+
+  function handleReason(reason: string) {
+    if (reasonPicked) return;
+    setReasonPicked(true);
+    sendFeedback("inaccurate", reason);
   }
 
   const buttons: { rating: Rating; icon: typeof Check; color: string; activeColor: string }[] = [
@@ -54,24 +79,42 @@ function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
   ];
 
   return (
-    <div className="flex items-center gap-1 pt-3 border-t border-[var(--border)]/50">
-      {buttons.map(({ rating, icon: Icon, color, activeColor }) => (
-        <button
-          key={rating}
-          onClick={() => handleRate(rating)}
-          className={`p-1.5 rounded-lg transition-all ${
-            selected === rating
-              ? activeColor
-              : selected
-                ? "opacity-30 " + color
-                : color + " hover:bg-[var(--border)]/30"
-          }`}
-          title={rating}
-          disabled={!!selected}
-        >
-          <Icon size={14} />
-        </button>
-      ))}
+    <div className="pt-3 border-t border-[var(--border)]/50">
+      <div className="flex items-center gap-1">
+        {buttons.map(({ rating, icon: Icon, color, activeColor }) => (
+          <button
+            key={rating}
+            onClick={() => handleRate(rating)}
+            className={`p-1.5 rounded-lg transition-all ${
+              selected === rating
+                ? activeColor
+                : selected
+                  ? "opacity-30 " + color
+                  : color + " hover:bg-[var(--border)]/30"
+            }`}
+            title={rating}
+            disabled={!!selected}
+          >
+            <Icon size={14} />
+          </button>
+        ))}
+      </div>
+      {showReasons && !reasonPicked && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {INACCURACY_REASONS.map((reason) => (
+            <button
+              key={reason}
+              onClick={() => handleReason(reason)}
+              className="px-2.5 py-1 text-[11px] rounded-full border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors"
+            >
+              {reason}
+            </button>
+          ))}
+        </div>
+      )}
+      {reasonPicked && (
+        <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Thanks for the detail</p>
+      )}
     </div>
   );
 }
