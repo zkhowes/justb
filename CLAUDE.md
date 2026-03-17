@@ -49,6 +49,8 @@ Each provider can be improved independently:
 | `PEXELS_API_KEY` | Yes | Pexels developer |
 | `TICKETMASTER_API_KEY` | No (degrades gracefully) | developer.ticketmaster.com |
 | `SEATGEEK_CLIENT_ID` | No (degrades gracefully) | seatgeek.com/build |
+| `DATABASE_URL` | No (preview features) | Neon console |
+| `NEXT_PUBLIC_PREVIEW_MODE` | No (set to "true" to enable) | Manual |
 
 ## Key Design Decisions
 
