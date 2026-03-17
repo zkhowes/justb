@@ -10,6 +10,14 @@ export type Category =
   | "food"
   | "community";
 
+export type GlyphData = {
+  weather: { temp: number; code: number } | null;
+  sunrise: string;
+  sunset: string;
+  moonPhase: string;
+  moonIllumination: number;
+};
+
 export type FeedItem = {
   id: string;
   title: string;

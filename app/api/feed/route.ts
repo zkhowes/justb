@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = await generateFeed(city, date);
-    return NextResponse.json(items, {
+    const { items, glyphs } = await generateFeed(city, date);
+    return NextResponse.json({ items, glyphs }, {
       headers: {
         // Cache on CDN for 4 hours, stale-while-revalidate for 8
         "Cache-Control": "public, s-maxage=14400, stale-while-revalidate=28800",

@@ -3,11 +3,12 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { MapPin, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
-import { FeedItem } from "@/lib/types";
+import { FeedItem, GlyphData } from "@/lib/types";
 import { FeedCard } from "@/components/feed-card";
 import { FeedSkeleton } from "@/components/feed-skeleton";
 import { LocationInput } from "@/components/location-input";
 import { BreathingExercise } from "@/components/breathing-exercise";
+import { Glyphs } from "@/components/glyphs";
 
 type Phase = "location" | "ready" | "breathing" | "waiting" | "feed";
 
@@ -38,10 +39,11 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("location");
   const [city, setCity] = useState<string | null>(null);
   const [items, setItems] = useState<FeedItem[]>([]);
+  const [glyphs, setGlyphs] = useState<GlyphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const feedDataRef = useRef<FeedItem[] | null>(null);
+  const feedDataRef = useRef<{ items: FeedItem[]; glyphs: GlyphData } | null>(null);
   const feedErrorRef = useRef<string | null>(null);
 
   const { gradient, isNight } = useMemo(() => getTimeOfDayGradient(), []);
@@ -103,7 +105,13 @@ export default function Home() {
     try {
       const cached = localStorage.getItem(getCacheKey(cityName));
       if (cached) {
-        feedDataRef.current = JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        // Support new { items, glyphs } shape and legacy array shape
+        if (Array.isArray(parsed)) {
+          feedDataRef.current = { items: parsed, glyphs: null as unknown as GlyphData };
+        } else {
+          feedDataRef.current = parsed;
+        }
         return;
       }
     } catch {
@@ -113,8 +121,7 @@ export default function Home() {
     try {
       const res = await fetch(`/api/feed?city=${encodeURIComponent(cityName)}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
-      const data: FeedItem[] = await res.json();
-      // Cache it
+      const data: { items: FeedItem[]; glyphs: GlyphData } = await res.json();
       try {
         localStorage.setItem(getCacheKey(cityName), JSON.stringify(data));
       } catch {
@@ -134,14 +141,15 @@ export default function Home() {
     try {
       const res = await fetch(`/api/feed?city=${encodeURIComponent(cityName)}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
-      const data: FeedItem[] = await res.json();
-      setItems(data);
+      const data: { items: FeedItem[]; glyphs: GlyphData } = await res.json();
+      setItems(data.items);
+      setGlyphs(data.glyphs);
       try {
         localStorage.setItem(getCacheKey(cityName), JSON.stringify(data));
       } catch {
         // Storage full
       }
-      fetchImages(data, cityName);
+      fetchImages(data.items, cityName);
     } catch {
       setError("Something went wrong generating your feed. Try refreshing.");
     } finally {
@@ -162,14 +170,21 @@ export default function Home() {
     if (city) fetchFeedToRef(city);
   }, [city, fetchFeedToRef]);
 
+  const applyFeedData = useCallback(
+    (feed: { items: FeedItem[]; glyphs: GlyphData }) => {
+      setItems(feed.items);
+      setGlyphs(feed.glyphs);
+      setPhase("feed");
+      if (city && feed.items.some((i) => i.imageQuery && !i.imageUrl)) {
+        fetchImages(feed.items, city);
+      }
+    },
+    [city, fetchImages]
+  );
+
   const handleBreathingComplete = useCallback(() => {
     if (feedDataRef.current) {
-      const data = feedDataRef.current;
-      setItems(data);
-      setPhase("feed");
-      if (city && data.some((i) => i.imageQuery && !i.imageUrl)) {
-        fetchImages(data, city);
-      }
+      applyFeedData(feedDataRef.current);
     } else if (feedErrorRef.current) {
       setError(feedErrorRef.current);
       setPhase("feed");
@@ -179,12 +194,7 @@ export default function Home() {
       const interval = setInterval(() => {
         if (feedDataRef.current) {
           clearInterval(interval);
-          const data = feedDataRef.current;
-          setItems(data);
-          setPhase("feed");
-          if (city && data.some((i) => i.imageQuery && !i.imageUrl)) {
-            fetchImages(data, city);
-          }
+          applyFeedData(feedDataRef.current);
         } else if (feedErrorRef.current) {
           clearInterval(interval);
           setError(feedErrorRef.current);
@@ -192,12 +202,13 @@ export default function Home() {
         }
       }, 500);
     }
-  }, [city, fetchImages]);
+  }, [applyFeedData]);
 
   function handleChangeCity() {
     localStorage.removeItem("justb-city");
     setCity(null);
     setItems([]);
+    setGlyphs(null);
     setError(null);
     feedDataRef.current = null;
     feedErrorRef.current = null;
@@ -318,6 +329,20 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {glyphs && (
+        <div
+          className={`sticky top-[61px] z-10 border-b border-[var(--border)] ${
+            isNight
+              ? "bg-indigo-950/95 backdrop-blur-sm"
+              : "bg-[var(--bg)]/95 backdrop-blur-sm"
+          }`}
+        >
+          <div className="max-w-lg mx-auto">
+            <Glyphs data={glyphs} isNight={isNight} />
+          </div>
+        </div>
+      )}
 
       <div className="max-w-lg mx-auto px-4 mt-6 relative">
         <p

@@ -8,7 +8,7 @@ export async function fetchSkyMoments(loc: LocationContext): Promise<MomentConte
     {
       category: "sky-space",
       source: "suncalc",
-      data: `Moon: ${astro.moonPhase}, ${astro.moonIllumination}% illumination. Moonrise ${astro.moonrise}, moonset ${astro.moonset}. Sunrise ${astro.sunrise}, sunset ${astro.sunset} (${loc.timezone}).`,
+      data: `Sunrise ${astro.sunrise}, sunset ${astro.sunset} (${loc.timezone}).`,
     },
   ];
 }

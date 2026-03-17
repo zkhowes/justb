@@ -1,6 +1,6 @@
 import { anthropic } from "./anthropic";
 import { gatherAllMoments, MomentContext } from "./moments";
-import { FeedItem } from "./types";
+import { FeedItem, GlyphData } from "./types";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -11,8 +11,8 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// In-memory cache: city+date -> feed items
-const feedCache = new Map<string, { items: FeedItem[]; timestamp: number }>();
+// In-memory cache: city+date -> feed items + glyphs
+const feedCache = new Map<string, { items: FeedItem[]; glyphs: GlyphData; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours
 
 function formatMomentsForPrompt(moments: MomentContext[]): string {
@@ -24,21 +24,21 @@ function formatMomentsForPrompt(moments: MomentContext[]): string {
 export async function generateFeed(
   city: string,
   date: string
-): Promise<FeedItem[]> {
+): Promise<{ items: FeedItem[]; glyphs: GlyphData }> {
   const cacheKey = `${city.toLowerCase().trim()}:${date}`;
   const cached = feedCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return shuffle([...cached.items]);
+    return { items: shuffle([...cached.items]), glyphs: cached.glyphs };
   }
 
   // 1. Gather structured data from all moment providers (APIs, suncalc, etc.)
-  const { loc, moments } = await gatherAllMoments(city, date);
+  const { loc, moments, glyphs } = await gatherAllMoments(city, date);
   const momentData = formatMomentsForPrompt(moments);
 
   // 2. Determine which categories already have API data
   const coveredCategories = new Set(moments.map((m) => m.category));
   const llmOnlyCategories: string[] = [];
-  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(2): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region.");
+  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature(3): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region.");
   if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through lesser-known spots.");
   if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days.");
   if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition");
@@ -60,7 +60,7 @@ ${llmOnlyCategories.join("\n")}
 
 ## Rules
 - For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
-- sky-space gets 2 items (one moon/sun from the data, one about visible planets/constellations for the season)
+- sky-space gets 1 item about visible planets, constellations, stars, or galaxies for the season and location. Do NOT mention moon phase or sunrise/sunset times (those are shown separately in the UI).
 - sports gets 1 item: consolidate the game data into one engaging summary
 - events gets 1 item: pick the 2-3 best events and highlight them
 - history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge of a historical event tied to ${city} and this date or time of year. Include indigenous history when relevant.
@@ -89,7 +89,7 @@ Tone: knowledgeable local friend. No HTML tags.`,
 
   const items = JSON.parse(jsonMatch[0]) as FeedItem[];
 
-  feedCache.set(cacheKey, { items, timestamp: Date.now() });
+  feedCache.set(cacheKey, { items, glyphs, timestamp: Date.now() });
 
-  return shuffle(items);
+  return { items: shuffle(items), glyphs };
 }
