@@ -45,7 +45,7 @@ async function run() {
       .filter((s) => s.length > 0);
 
     for (const stmt of statements) {
-      await sql(stmt);
+      await sql.query(stmt);
     }
 
     await sql`INSERT INTO _migrations (name) VALUES (${file})`;
