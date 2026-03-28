@@ -60,7 +60,12 @@ The sky provider now includes:
 | `TICKETMASTER_API_KEY` | No (degrades gracefully) | developer.ticketmaster.com |
 | `SEATGEEK_CLIENT_ID` | No (degrades gracefully) | seatgeek.com/build |
 | `DATABASE_URL` | No (preview features) | Neon console |
-| `NEXT_PUBLIC_PREVIEW_MODE` | No (set to "true" to enable) | Manual |
+| `ADMIN_EMAIL` | Yes (for /admin) | Your Google email |
+| `NEXTAUTH_SECRET` | Yes (for /admin) | `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | Yes (for /admin) | App URL |
+| `GOOGLE_CLIENT_ID` | Yes (for /admin) | Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` | Yes (for /admin) | Google Cloud Console |
+| `NEXT_PUBLIC_PREVIEW_MODE` | No (legacy, replaced by /admin) | Manual |
 
 ## Kanban
 

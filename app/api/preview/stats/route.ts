@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdmin } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  if (process.env.NEXT_PUBLIC_PREVIEW_MODE !== "true") {
-    return NextResponse.json({ error: "Preview mode disabled" }, { status: 403 });
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
