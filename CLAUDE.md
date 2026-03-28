@@ -18,10 +18,11 @@ The feed is built from **moment providers** — modular data fetchers that each 
 
 | Provider | File | Categories | Data Source | Cost |
 |----------|------|------------|-------------|------|
-| **Sky** | `lib/moments/sky.ts` | sky-space | suncalc (local computation) | Free |
+| **Sky** | `lib/moments/sky.ts` | sky-space | suncalc + Open-Meteo hourly cloud cover | Free |
 | **Sports** | `lib/moments/sports.ts` | sports | ESPN unofficial API | Free, no key |
 | **Events** | `lib/moments/events.ts` | events, culture | Ticketmaster + SeatGeek | Free (API keys needed) |
-| **History** | `lib/moments/history.ts` | history | Wikimedia On This Day | Free |
+| **History** | `lib/moments/history.ts` | history | Wikimedia On This Day + Wikipedia city articles | Free |
+| **Reddit** | `lib/moments/reddit.ts` | community | Reddit JSON API (r/{CityName}) | Free, no key |
 | **LLM-only** | (in prompt) | nature, local-scene, earth-garden, food/community | Claude Haiku training knowledge | ~2-3K tokens |
 
 ### Adding a New Moment Provider
@@ -34,12 +35,21 @@ The feed is built from **moment providers** — modular data fetchers that each 
 ### Improving an Existing Provider
 
 Each provider can be improved independently:
-- **Sky**: Could add visible planet data via an astronomy API
+- **Sky**: Could add visible planet data via an astronomy API; could render SVG sky charts
 - **Sports**: Could add college sports, standings, injury reports
-- **Events**: Could add Bandsintown for indie music coverage
-- **History**: Could filter for events geographically relevant to the user's city
+- **Events**: Could add Bandsintown for indie music coverage. Eventbrite search API was removed in 2019 — not viable. Meetup API requires paid Pro account.
+- **History**: Now scrapes Wikipedia city articles for date-specific local facts. **Consider switching to Sonnet for this category** — Haiku hallucinates dates when no API data matches. Sonnet would be more reliable for knowledge-based history items but costs ~25x more per call.
 - **Nature**: Currently LLM-only — could integrate eBird API for real bird sighting data
 - **Culture**: Ticketmaster covers ticketed events; no free API exists for museum exhibitions
+- **Reddit**: Maps city names to subreddits via `CITY_SUBREDDITS`. Add new city mappings there as needed.
+
+### Sky Provider Details
+
+The sky provider now includes:
+- **Golden hour windows** (morning + evening) via SunCalc
+- **Sunset quality** — cross-references hourly cloud cover from Open-Meteo with sunset time
+- **Daylight milestones** — duration changes, 12-hour crossing, solstice turn detection
+- Sunrise/sunset times are NOT included (shown in glyphs UI separately)
 
 ## Environment Variables
 
@@ -51,6 +61,23 @@ Each provider can be improved independently:
 | `SEATGEEK_CLIENT_ID` | No (degrades gracefully) | seatgeek.com/build |
 | `DATABASE_URL` | No (preview features) | Neon console |
 | `NEXT_PUBLIC_PREVIEW_MODE` | No (set to "true" to enable) | Manual |
+
+## Kanban
+
+### To Investigate
+- **Cross-category blending**: Cards that bridge two categories (e.g. earth-garden + local-scene for farmers markets). Consider `secondaryCategory` field or prompt guidance for intentional crossovers.
+- **Regional events**: Surface notable events within ~2hr drive of the city (e.g. Skagit Valley Tulip Festival for Seattle users). Needs radius expansion or curated regional event mapping.
+- **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
+- **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
+
+### Done (2026-03-28)
+- Reddit provider for local community signal
+- Enhanced sky provider (golden hour, sunset quality, daylight milestones)
+- Wikipedia city history scraping for local on-this-day facts
+- History prompt guardrails to prevent date hallucination
+- Image height increase (h-32 → h-48)
+- Focused imageQuery (single most visual subject)
+- Category validation/normalization (ensures all cards have pills)
 
 ## Key Design Decisions
 

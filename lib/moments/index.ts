@@ -5,6 +5,7 @@ import { fetchSkyMoments } from "./sky";
 import { fetchSportsMoments } from "./sports";
 import { fetchEventMoments } from "./events";
 import { fetchHistoryMoments } from "./history";
+import { fetchRedditMoments } from "./reddit";
 import { fetchWeather } from "./weather";
 import { GlyphData } from "../types";
 
@@ -24,29 +25,30 @@ export async function gatherAllMoments(
 
   const loc: LocationContext = { city, lat, lng, timezone, date, dateISO };
 
-  // Fetch all moment providers + weather in parallel
-  const [skyResult, sportsResult, eventsResult, historyResult, weatherResult] =
+  // Fetch weather first (sky provider needs it), other providers in parallel
+  const weatherResult = await fetchWeather(lat, lng);
+
+  const [skyResult, sportsResult, eventsResult, historyResult, redditResult] =
     await Promise.allSettled([
-      fetchSkyMoments(loc),
+      fetchSkyMoments(loc, weatherResult),
       fetchSportsMoments(loc),
       fetchEventMoments(loc),
       fetchHistoryMoments(loc),
-      fetchWeather(lat, lng),
+      fetchRedditMoments(loc),
     ]);
 
   const moments: MomentContext[] = [];
-  for (const result of [skyResult, sportsResult, eventsResult, historyResult]) {
+  for (const result of [skyResult, sportsResult, eventsResult, historyResult, redditResult]) {
     if (result.status === "fulfilled") {
       moments.push(...result.value);
     }
   }
 
   const astro = getAstroData(lat, lng, new Date(), timezone);
-  const weather =
-    weatherResult.status === "fulfilled" ? weatherResult.value : null;
+  const weather = weatherResult;
 
   const glyphs: GlyphData = {
-    weather,
+    weather: weather ? { temp: weather.temp, code: weather.code } : null,
     sunrise: astro.sunrise,
     sunset: astro.sunset,
     moonPhase: astro.moonPhase,

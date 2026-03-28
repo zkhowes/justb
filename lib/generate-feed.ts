@@ -1,6 +1,23 @@
 import { anthropic } from "./anthropic";
 import { gatherAllMoments, MomentContext } from "./moments";
-import { FeedItem, GlyphData } from "./types";
+import { FeedItem, GlyphData, Category } from "./types";
+
+const VALID_CATEGORIES: Set<string> = new Set<string>([
+  "sky-space", "nature", "local-scene", "sports", "events",
+  "earth-garden", "history", "culture", "food", "community",
+]);
+
+/** Normalize common LLM misspellings/variations to valid category strings */
+function normalizeCategory(raw: string): Category | null {
+  const s = raw.toLowerCase().trim().replace(/_/g, "-");
+  if (VALID_CATEGORIES.has(s)) return s as Category;
+  // Common LLM variations
+  if (s === "sky" || s === "space") return "sky-space";
+  if (s === "garden" || s === "earth") return "earth-garden";
+  if (s === "local" || s === "scene") return "local-scene";
+  if (s === "event" || s === "music") return "events";
+  return null;
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -61,15 +78,16 @@ ${llmOnlyCategories.join("\n")}
 
 ## Rules
 - For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
-- sky-space gets 1 item about visible planets, constellations, stars, or galaxies for the season and location. Do NOT mention moon phase or sunrise/sunset times (those are shown separately in the UI).
+- sky-space gets 1 item. Lead with the most compelling sky data provided (golden hour, sunset quality, daylight milestones). Then add visible planets/constellations for the season. Do NOT repeat sunrise/sunset times or moon phase (shown separately in the UI glyphs).
 - sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
 - events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
-- history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge of a historical event tied to ${city} and this date or time of year. Include indigenous history when relevant.
+- history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge — but ONLY if you are highly confident about the specific date. If you cannot confidently tie a specific event to this exact date, write about a seasonal historical pattern for the region instead (e.g. "This time of year in the 1850s, settlers were..." or "Late March historically marked..."). NEVER fabricate or guess specific dates — getting a date wrong is worse than being general. Include indigenous history when relevant.
+- If community/reddit data was provided, write 1 community item highlighting the most interesting local intel. Focus on actionable tips, timely discoveries, or useful PSAs — not complaints or generic chatter.
 - If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
 - Aim for 10 items, but only include what's genuinely relevant — fewer is fine. Do not pad with generic filler.
 ${recentTopics && recentTopics.length > 0 ? `\n## Recently covered topics (vary your coverage, avoid repeating these):\n${recentTopics.join(", ")}` : ""}
 
-Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search that matches the EXACT place/subject in your body text (e.g. 'fremont troll sculpture' not 'seattle market', 'daffodils blooming garden' not 'flowers'). NEVER use a famous landmark as imageQuery unless the body is actually about that landmark."}
+Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search for the SINGLE most visual subject in your body text. If the body mentions multiple things (e.g. cherry blossoms AND returning swallows), pick the ONE most visually striking for the image — do NOT try to summarize everything. Examples: 'cherry blossoms branch closeup' not 'spring nature seattle', 'barn swallow flight' not 'birds flowers'. NEVER use a famous landmark unless the body is actually about that landmark. For sky-space: use the specific constellation or planet name (e.g. 'orion constellation stars' not 'night sky')."}
 
 Tone: knowledgeable local friend. No HTML tags.`,
       },
@@ -89,7 +107,16 @@ Tone: knowledgeable local friend. No HTML tags.`,
     throw new Error("Failed to parse feed items from Claude response");
   }
 
-  const items = JSON.parse(jsonMatch[0]) as FeedItem[];
+  const rawItems = JSON.parse(jsonMatch[0]) as FeedItem[];
+
+  // Validate and normalize categories so every card gets a pill
+  const items = rawItems
+    .map((item) => {
+      const cat = normalizeCategory(item.category);
+      if (!cat) return null;
+      return { ...item, category: cat };
+    })
+    .filter((item): item is FeedItem => item !== null);
 
   feedCache.set(cacheKey, { items, glyphs, timestamp: Date.now() });
 

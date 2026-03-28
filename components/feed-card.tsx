@@ -140,7 +140,7 @@ export function FeedCard({
       style={{ boxShadow: "var(--shadow)" }}
     >
       {item.imageUrl ? (
-        <div className="relative h-32 overflow-hidden">
+        <div className="relative h-48 overflow-hidden">
           <img
             src={item.imageUrl}
             alt=""
