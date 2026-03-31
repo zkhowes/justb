@@ -75,6 +75,12 @@ The sky provider now includes:
 - **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
 
+### Done (2026-03-31)
+- Nature-based backgrounds tied to location + season (Pexels API)
+- Glassmorphism cards with backdrop-blur and transparency
+- Ready button 2s press-and-hold with SVG ring animation
+- Breathing reduced to 2 breaths with 1s hold
+
 ### Done (2026-03-28)
 - Reddit provider for local community signal
 - Enhanced sky provider (golden hour, sunset quality, daylight milestones)
