@@ -3,7 +3,7 @@ import { gatherAllMoments, MomentContext } from "./moments";
 import { FeedItem, GlyphData, Category } from "./types";
 
 const VALID_CATEGORIES: Set<string> = new Set<string>([
-  "sky-space", "nature", "local-scene", "sports", "events",
+  "sky-space", "sky", "space", "nature", "local-scene", "sports", "events",
   "earth-garden", "history", "culture", "food", "community",
 ]);
 
@@ -12,7 +12,7 @@ function normalizeCategory(raw: string): Category | null {
   const s = raw.toLowerCase().trim().replace(/_/g, "-");
   if (VALID_CATEGORIES.has(s)) return s as Category;
   // Common LLM variations
-  if (s === "sky" || s === "space") return "sky-space";
+  if (s === "sky-space") return "sky"; // legacy fallback
   if (s === "garden" || s === "earth") return "earth-garden";
   if (s === "local" || s === "scene") return "local-scene";
   if (s === "event" || s === "music") return "events";
@@ -78,7 +78,8 @@ ${llmOnlyCategories.join("\n")}
 
 ## Rules
 - For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
-- sky-space gets 1 item. Lead with the most compelling sky data provided (golden hour, sunset quality, daylight milestones). Then add visible planets/constellations for the season. Do NOT repeat sunrise/sunset times or moon phase (shown separately in the UI glyphs).
+- "sky" gets 1 item about golden hour, sunset quality, and daylight milestones. Do NOT repeat sunrise/sunset times or moon phase (shown separately in the UI glyphs).
+- "space" gets 1 item about visible planets, constellations, and notable celestial objects tonight. Be specific about where to look (compass direction) and when. Do NOT repeat moon phase (shown in glyphs).
 - sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
 - events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
 - history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge — but ONLY if you are highly confident about the specific date. If you cannot confidently tie a specific event to this exact date, write about a seasonal historical pattern for the region instead (e.g. "This time of year in the 1850s, settlers were..." or "Late March historically marked..."). NEVER fabricate or guess specific dates — getting a date wrong is worse than being general. Include indigenous history when relevant.

@@ -1,5 +1,7 @@
 export type Category =
   | "sky-space"
+  | "sky"
+  | "space"
   | "nature"
   | "local-scene"
   | "sports"

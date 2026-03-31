@@ -357,14 +357,13 @@ export default function Home() {
           className="fixed inset-0 -z-20 bg-cover bg-center"
           style={{
             backgroundImage: `url(${bgUrl})`,
-            filter: "blur(40px) brightness(0.85)",
-            transform: "scale(1.1)",
+            filter: "brightness(0.9)",
           }}
         />
       )}
       <div
         className={`fixed inset-0 -z-10 ${
-          isNight ? "bg-indigo-950/60" : "bg-white/50"
+          isNight ? "bg-indigo-950/40" : "bg-white/30"
         }`}
       />
     </>

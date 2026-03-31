@@ -138,11 +138,24 @@ export function BreathingExercise({
           onPointerDown={handlePressStart}
           onPointerUp={handlePressEnd}
           onPointerLeave={handlePressEnd}
-          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none`}
+          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none overflow-hidden`}
           animate={pressing ? { scale: 0.97 } : { scale: [1, 1.03, 1] }}
           transition={pressing ? { duration: 0.15 } : { duration: 3, repeat: Infinity, ease: "easeInOut" }}
           aria-label="Press and hold for 2 seconds to begin"
         >
+          {/* Fill gauge — rises from bottom */}
+          {progress > 0 && (
+            <div
+              className="absolute inset-0 pointer-events-none rounded-full"
+              style={{
+                background: isNight
+                  ? "rgba(129, 140, 248, 0.15)"
+                  : "rgba(168, 162, 158, 0.15)",
+                clipPath: `inset(${(1 - progress) * 100}% 0 0 0)`,
+              }}
+            />
+          )}
+          {/* Progress ring around perimeter */}
           <svg
             className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
             viewBox="0 0 160 160"
@@ -160,7 +173,7 @@ export function BreathingExercise({
               opacity={progress > 0 ? 1 : 0}
             />
           </svg>
-          <span className={`font-serif text-lg font-semibold ${textColor}`}>
+          <span className={`relative font-serif text-lg font-semibold ${textColor}`}>
             {pressing ? "Hold..." : "Ready to JustB?"}
           </span>
         </motion.button>

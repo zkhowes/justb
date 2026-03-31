@@ -10,6 +10,8 @@ const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
 const gradients: Record<Category, string> = {
   "sky-space": "from-indigo-900 to-indigo-700",
+  sky: "from-amber-700 to-amber-500",
+  space: "from-indigo-900 to-indigo-700",
   nature: "from-emerald-700 to-emerald-500",
   "local-scene": "from-amber-700 to-amber-500",
   sports: "from-red-700 to-red-500",

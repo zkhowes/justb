@@ -1,6 +1,8 @@
 import { Category } from "@/lib/types";
 import {
   Moon,
+  Sun,
+  Star,
   Leaf,
   MapPin,
   Mountain,
@@ -22,6 +24,18 @@ const categoryConfig: Record<
     color: "var(--cat-sky-space)",
     bg: "var(--cat-sky-space-bg)",
     icon: Moon,
+  },
+  sky: {
+    label: "Sky",
+    color: "var(--cat-sky)",
+    bg: "var(--cat-sky-bg)",
+    icon: Sun,
+  },
+  space: {
+    label: "Space",
+    color: "var(--cat-space)",
+    bg: "var(--cat-space-bg)",
+    icon: Star,
   },
   nature: {
     label: "Nature",

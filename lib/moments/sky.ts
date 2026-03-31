@@ -102,13 +102,23 @@ export async function fetchSkyMoments(
     }
   }
 
-  return [
-    {
-      category: "sky-space",
+  const results: MomentContext[] = [];
+
+  // Sky moment: golden hour, sunset quality, daylight milestones
+  if (lines.length > 0) {
+    results.push({
+      category: "sky",
       source: "suncalc+weather",
-      data: lines.length > 0
-        ? `Sky data for ${loc.city}:\n${lines.join("\n")}\n\nNote: sunrise/sunset times are shown separately in the glyphs UI — do NOT repeat them. Focus on golden hour, sunset quality, daylight milestones, visible planets, and constellations for the season.`
-        : `Sunrise ${astro.sunrise}, sunset ${astro.sunset} (${loc.timezone}). Focus on visible planets and constellations for the season — do NOT repeat sunrise/sunset times (shown in glyphs UI).`,
-    },
-  ];
+      data: `Sky data for ${loc.city}:\n${lines.join("\n")}\n\nNote: sunrise/sunset times are shown separately in the glyphs UI — do NOT repeat them. Focus on golden hour, sunset quality, and daylight milestones.`,
+    });
+  }
+
+  // Space moment: always provide context for planets/constellations (LLM knowledge)
+  results.push({
+    category: "space",
+    source: "suncalc",
+    data: `Space data for ${loc.city} (${loc.timezone}): Provide visible planets, constellations, and notable celestial objects for tonight's sky. Be specific about where to look (compass direction, altitude) and when. Do NOT repeat sunrise/sunset or moon phase (shown in glyphs UI).`,
+  });
+
+  return results;
 }
