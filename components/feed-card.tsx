@@ -123,10 +123,12 @@ export function FeedCard({
   item,
   index,
   city,
+  isNight,
 }: {
   item: FeedItem;
   index: number;
   city?: string;
+  isNight?: boolean;
 }) {
   const Icon = categoryConfig[item.category]?.icon;
   const gradient = gradients[item.category] || "from-gray-700 to-gray-500";
@@ -136,8 +138,11 @@ export function FeedCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08, ease: "easeOut" }}
-      className="bg-[var(--bg-card)] rounded-xl overflow-hidden"
-      style={{ boxShadow: "var(--shadow)" }}
+      className={`rounded-xl overflow-hidden backdrop-blur-xl border ${
+        isNight
+          ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
+          : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
+      }`}
     >
       {item.imageUrl ? (
         <div className="relative h-48 overflow-hidden">

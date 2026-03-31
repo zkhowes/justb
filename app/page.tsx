@@ -9,6 +9,7 @@ import { FeedSkeleton } from "@/components/feed-skeleton";
 import { LocationInput } from "@/components/location-input";
 import { BreathingExercise } from "@/components/breathing-exercise";
 import { Glyphs } from "@/components/glyphs";
+import { getSeasonForMonth } from "@/lib/background";
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
@@ -68,6 +69,7 @@ export default function Home() {
   const [glyphs, setGlyphs] = useState<GlyphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
 
   const feedDataRef = useRef<{ items: FeedItem[]; glyphs: GlyphData } | null>(null);
   const feedErrorRef = useRef<string | null>(null);
@@ -92,6 +94,40 @@ export default function Home() {
       setPhase("ready");
     }
   }, []);
+
+  // Fetch nature background image based on city + season
+  useEffect(() => {
+    if (!city) return;
+    const month = new Date().getMonth() + 1;
+    const season = getSeasonForMonth(month);
+    const cacheKey = `justb-bg:${city.toLowerCase().trim()}:${season}:${isNight}`;
+
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      setBgUrl(cached);
+      return;
+    }
+
+    const params = new URLSearchParams({
+      city,
+      month: String(month),
+      night: String(isNight),
+    });
+
+    fetch(`/api/background?${params}`)
+      .then((res) => res.json())
+      .then((data: { url: string | null }) => {
+        if (data.url) {
+          const img = new Image();
+          img.onload = () => {
+            setBgUrl(data.url);
+            try { localStorage.setItem(cacheKey, data.url!); } catch {}
+          };
+          img.src = data.url;
+        }
+      })
+      .catch(() => {});
+  }, [city, isNight]);
 
   // Session tracking + scroll observer (preview mode only)
   useEffect(() => {
@@ -314,10 +350,31 @@ export default function Home() {
 
   // --- Render ---
 
+  const backgroundLayers = (
+    <>
+      {bgUrl && (
+        <div
+          className="fixed inset-0 -z-20 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${bgUrl})`,
+            filter: "blur(40px) brightness(0.85)",
+            transform: "scale(1.1)",
+          }}
+        />
+      )}
+      <div
+        className={`fixed inset-0 -z-10 ${
+          isNight ? "bg-indigo-950/60" : "bg-white/50"
+        }`}
+      />
+    </>
+  );
+
   // Location selection
   if (phase === "location") {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-6">
+        {backgroundLayers}
         <div className="text-center mb-10">
           <h1 className="font-serif text-5xl font-bold tracking-tight mb-3">
             JustB
@@ -335,6 +392,7 @@ export default function Home() {
   if (phase === "ready" || phase === "breathing") {
     return (
       <main className="min-h-screen relative">
+        {backgroundLayers}
         <div
           className={`absolute inset-x-0 top-0 h-[200px] bg-gradient-to-b ${gradient} pointer-events-none`}
         />
@@ -351,6 +409,7 @@ export default function Home() {
   if (phase === "waiting") {
     return (
       <main className="min-h-screen relative">
+        {backgroundLayers}
         <div
           className={`absolute inset-x-0 top-0 h-[200px] bg-gradient-to-b ${gradient} pointer-events-none`}
         />
@@ -370,15 +429,16 @@ export default function Home() {
   // Feed
   return (
     <main className="min-h-screen pb-12 relative">
+      {backgroundLayers}
       <div
         className={`absolute inset-x-0 top-0 h-[200px] bg-gradient-to-b ${gradient} pointer-events-none`}
       />
 
       <header
-        className={`sticky top-0 z-10 border-b border-[var(--border)] px-4 py-4 ${
+        className={`sticky top-0 z-10 border-b px-4 py-4 backdrop-blur-xl ${
           isNight
-            ? "bg-indigo-950/95 backdrop-blur-sm"
-            : "bg-[var(--bg)]/95 backdrop-blur-sm"
+            ? "bg-indigo-950/60 border-white/10"
+            : "bg-white/60 border-white/20"
         }`}
       >
         <div className="max-w-lg mx-auto flex items-center justify-between">
@@ -429,10 +489,10 @@ export default function Home() {
 
       {glyphs && (
         <div
-          className={`sticky top-[61px] z-10 border-b border-[var(--border)] ${
+          className={`sticky top-[61px] z-10 border-b backdrop-blur-xl ${
             isNight
-              ? "bg-indigo-950/95 backdrop-blur-sm"
-              : "bg-[var(--bg)]/95 backdrop-blur-sm"
+              ? "bg-indigo-950/60 border-white/10"
+              : "bg-white/60 border-white/20"
           }`}
         >
           <div className="max-w-lg mx-auto">
@@ -457,12 +517,12 @@ export default function Home() {
         )}
 
         {refreshing ? (
-          <FeedSkeleton />
+          <FeedSkeleton isNight={isNight} />
         ) : (
           <div className="space-y-6">
             {items.map((item, i) => (
               <div key={item.id} data-card-index={i}>
-                <FeedCard item={item} index={i} city={city || undefined} />
+                <FeedCard item={item} index={i} city={city || undefined} isNight={isNight} />
               </div>
             ))}
           </div>

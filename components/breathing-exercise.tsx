@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type BreathPhase = "inhale" | "hold" | "exhale";
 
 const PHASE_DURATION: Record<BreathPhase, number> = {
   inhale: 3000,
-  hold: 3000,
+  hold: 1000,
   exhale: 6000,
 };
 
@@ -17,7 +17,10 @@ const PHASE_LABEL: Record<BreathPhase, string> = {
   exhale: "Breathe out...",
 };
 
-const TOTAL_BREATHS = 3;
+const TOTAL_BREATHS = 2;
+const PRESS_DURATION = 2000;
+const CIRCLE_RADIUS = 78;
+const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
 export function BreathingExercise({
   onStart,
@@ -32,11 +35,48 @@ export function BreathingExercise({
   const [breathIndex, setBreathIndex] = useState(0);
   const [phase, setPhase] = useState<BreathPhase>("inhale");
   const [done, setDone] = useState(false);
+  const [pressing, setPressing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const rafRef = useRef<number>(0);
+  const pressStartRef = useRef<number>(0);
 
   const handleClick = useCallback(() => {
     setStarted(true);
     onStart();
   }, [onStart]);
+
+  const handlePressEnd = useCallback(() => {
+    if (!pressing) return;
+    setPressing(false);
+    setProgress(0);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  }, [pressing]);
+
+  const handlePressStart = useCallback(() => {
+    if (started) return;
+    setPressing(true);
+    pressStartRef.current = Date.now();
+
+    const tick = () => {
+      const elapsed = Date.now() - pressStartRef.current;
+      const p = Math.min(elapsed / PRESS_DURATION, 1);
+      setProgress(p);
+      if (p >= 1) {
+        setPressing(false);
+        setProgress(0);
+        handleClick();
+      } else {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [started, handleClick]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!started || done) return;
@@ -95,14 +135,33 @@ export function BreathingExercise({
     >
       {!started ? (
         <motion.button
-          onClick={handleClick}
-          className={`w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors`}
-          animate={{ scale: [1, 1.03, 1] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          whileTap={{ scale: 0.97 }}
+          onPointerDown={handlePressStart}
+          onPointerUp={handlePressEnd}
+          onPointerLeave={handlePressEnd}
+          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none`}
+          animate={pressing ? { scale: 0.97 } : { scale: [1, 1.03, 1] }}
+          transition={pressing ? { duration: 0.15 } : { duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          aria-label="Press and hold for 2 seconds to begin"
         >
+          <svg
+            className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+            viewBox="0 0 160 160"
+          >
+            <circle
+              cx="80"
+              cy="80"
+              r={CIRCLE_RADIUS}
+              fill="none"
+              stroke={isNight ? "#818cf8" : "#a8a29e"}
+              strokeWidth="3"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
+              strokeLinecap="round"
+              opacity={progress > 0 ? 1 : 0}
+            />
+          </svg>
           <span className={`font-serif text-lg font-semibold ${textColor}`}>
-            Ready to JustB?
+            {pressing ? "Hold..." : "Ready to JustB?"}
           </span>
         </motion.button>
       ) : (

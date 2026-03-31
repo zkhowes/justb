@@ -1,11 +1,14 @@
-export function FeedSkeleton() {
+export function FeedSkeleton({ isNight }: { isNight?: boolean }) {
   return (
     <div className="space-y-6">
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="bg-[var(--bg-card)] rounded-xl overflow-hidden"
-          style={{ boxShadow: "var(--shadow)" }}
+          className={`rounded-xl overflow-hidden backdrop-blur-xl border ${
+            isNight
+              ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
+              : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
+          }`}
         >
           <div className="skeleton h-24 w-full" />
           <div className="p-5 space-y-3">
