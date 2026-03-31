@@ -186,7 +186,7 @@ export function BreathingExercise({
             initial={{ scale: 0.6 }}
           />
 
-          <div className="h-12 flex flex-col items-center justify-center">
+          <div className={`h-14 flex flex-col items-center justify-center px-6 py-2 rounded-2xl backdrop-blur-xl ${isNight ? "bg-indigo-950/50" : "bg-white/70"}`}>
             <AnimatePresence mode="wait">
               <motion.p
                 key={phase}
@@ -199,7 +199,7 @@ export function BreathingExercise({
                 {PHASE_LABEL[phase]}
               </motion.p>
             </AnimatePresence>
-            <p className={`text-xs mt-2 ${mutedColor}`}>
+            <p className={`text-xs mt-1 ${mutedColor}`}>
               {breathIndex + 1} of {TOTAL_BREATHS}
             </p>
           </div>
