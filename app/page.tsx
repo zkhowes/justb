@@ -387,11 +387,10 @@ export default function Home() {
     );
   }
 
-  // Breathing exercise
+  // Breathing exercise — clean, minimal screen (no background image)
   if (phase === "ready" || phase === "breathing") {
     return (
-      <main className="min-h-screen relative">
-        {backgroundLayers}
+      <main className={`min-h-screen relative ${isNight ? "bg-indigo-950" : "bg-[var(--bg)]"}`}>
         <div
           className={`absolute inset-x-0 top-0 h-[200px] bg-gradient-to-b ${gradient} pointer-events-none`}
         />

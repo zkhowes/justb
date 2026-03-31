@@ -118,14 +118,14 @@ export function BreathingExercise({
     ? { duration: 2, repeat: Infinity, repeatType: "reverse" as const, ease: "easeInOut" as const }
     : { duration: PHASE_DURATION[phase] / 1000, ease: "easeInOut" as const };
 
-  const textColor = isNight ? "text-white" : "text-stone-800";
-  const mutedColor = isNight ? "text-indigo-200" : "text-stone-600";
+  const textColor = isNight ? "text-indigo-200" : "text-[var(--text-secondary)]";
+  const mutedColor = isNight ? "text-indigo-400" : "text-[var(--text-muted)]";
   const ringColor = isNight
-    ? "border-indigo-300/50"
-    : "border-stone-400/60";
+    ? "border-indigo-400/40"
+    : "border-stone-300/60";
   const glowColor = isNight
-    ? "shadow-indigo-500/30"
-    : "shadow-stone-500/30";
+    ? "shadow-indigo-500/20"
+    : "shadow-stone-400/20";
 
   return (
     <motion.div
@@ -138,7 +138,7 @@ export function BreathingExercise({
           onPointerDown={handlePressStart}
           onPointerUp={handlePressEnd}
           onPointerLeave={handlePressEnd}
-          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-2xl ${glowColor} transition-colors select-none touch-none overflow-hidden backdrop-blur-xl ${isNight ? "bg-indigo-950/50" : "bg-white/60"}`}
+          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none overflow-hidden`}
           animate={pressing ? { scale: 0.97 } : { scale: [1, 1.03, 1] }}
           transition={pressing ? { duration: 0.15 } : { duration: 3, repeat: Infinity, ease: "easeInOut" }}
           aria-label="Press and hold for 2 seconds to begin"
@@ -180,13 +180,13 @@ export function BreathingExercise({
       ) : (
         <div className="flex flex-col items-center gap-8">
           <motion.div
-            className={`w-40 h-40 rounded-full border-2 ${ringColor} shadow-2xl ${glowColor} backdrop-blur-xl ${isNight ? "bg-indigo-950/50" : "bg-white/60"}`}
+            className={`w-40 h-40 rounded-full border-2 ${ringColor} shadow-lg ${glowColor}`}
             animate={{ scale: circleScale }}
             transition={circleTransition}
             initial={{ scale: 0.6 }}
           />
 
-          <div className={`h-14 flex flex-col items-center justify-center px-6 py-2 rounded-2xl backdrop-blur-xl ${isNight ? "bg-indigo-950/50" : "bg-white/70"}`}>
+          <div className="h-12 flex flex-col items-center justify-center">
             <AnimatePresence mode="wait">
               <motion.p
                 key={phase}
@@ -199,7 +199,7 @@ export function BreathingExercise({
                 {PHASE_LABEL[phase]}
               </motion.p>
             </AnimatePresence>
-            <p className={`text-xs mt-1 ${mutedColor}`}>
+            <p className={`text-xs mt-2 ${mutedColor}`}>
               {breathIndex + 1} of {TOTAL_BREATHS}
             </p>
           </div>
