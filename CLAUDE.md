@@ -78,8 +78,10 @@ The sky provider now includes:
 ### Done (2026-03-31)
 - Nature-based backgrounds tied to location + season (Pexels API)
 - Glassmorphism cards with backdrop-blur and transparency
-- Ready button 2s press-and-hold with SVG ring animation
+- Ready button 2s press-and-hold with SVG ring + fill gauge animation
 - Breathing reduced to 2 breaths with 1s hold
+- Sharp background (no blur) with frosted glass card overlay
+- Split sky-space into separate sky and space categories
 
 ### Done (2026-03-28)
 - Reddit provider for local community signal
