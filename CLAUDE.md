@@ -76,6 +76,8 @@ The sky provider now includes:
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
 
 ### Done (2026-03-31)
+- Admin debug/monitoring tab — full feed trace with per-provider params, responses, timing, LLM prompt/response, and per-card user feedback
+- Fix dark mode card text contrast (white text on night glassmorphism cards)
 - Nature-based backgrounds tied to location + season (Pexels API)
 - Glassmorphism cards with backdrop-blur and transparency
 - Ready button 2s press-and-hold with SVG ring + fill gauge animation
