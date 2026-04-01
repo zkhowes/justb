@@ -189,12 +189,18 @@ export function FeedCard({
         </div>
       )}
       <div className="p-5">
-        <h2 className="font-serif text-lg font-semibold leading-snug mb-2">
+        <h2
+          className={`font-serif text-lg font-semibold leading-snug mb-2 ${
+            isNight ? "text-white" : ""
+          }`}
+        >
           {item.title}
         </h2>
         <p
-          className="text-sm leading-relaxed"
-          style={{ color: "var(--text-secondary)" }}
+          className={`text-sm leading-relaxed ${
+            isNight ? "text-white/75" : ""
+          }`}
+          style={isNight ? undefined : { color: "var(--text-secondary)" }}
         >
           {item.body}
         </p>
