@@ -19,7 +19,7 @@ const PHASE_LABEL: Record<BreathPhase, string> = {
 
 const TOTAL_BREATHS = 2;
 const PRESS_DURATION = 2000;
-const CIRCLE_RADIUS = 78;
+const CIRCLE_RADIUS = 156;
 const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
 export function BreathingExercise({
@@ -138,7 +138,7 @@ export function BreathingExercise({
           onPointerDown={handlePressStart}
           onPointerUp={handlePressEnd}
           onPointerLeave={handlePressEnd}
-          className={`relative w-40 h-40 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none overflow-hidden`}
+          className={`relative w-80 h-80 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none overflow-hidden`}
           animate={pressing ? { scale: 0.97 } : { scale: [1, 1.03, 1] }}
           transition={pressing ? { duration: 0.15 } : { duration: 3, repeat: Infinity, ease: "easeInOut" }}
           aria-label="Press and hold for 2 seconds to begin"
@@ -158,11 +158,11 @@ export function BreathingExercise({
           {/* Progress ring around perimeter */}
           <svg
             className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
-            viewBox="0 0 160 160"
+            viewBox="0 0 320 320"
           >
             <circle
-              cx="80"
-              cy="80"
+              cx="160"
+              cy="160"
               r={CIRCLE_RADIUS}
               fill="none"
               stroke={isNight ? "#818cf8" : "#a8a29e"}
@@ -173,14 +173,14 @@ export function BreathingExercise({
               opacity={progress > 0 ? 1 : 0}
             />
           </svg>
-          <span className={`relative font-serif text-lg font-semibold ${textColor}`}>
-            {pressing ? "Hold..." : "Ready to JustB?"}
+          <span className={`relative font-serif text-xl font-semibold ${textColor}`}>
+            {pressing ? "Hold..." : "Click and hold"}
           </span>
         </motion.button>
       ) : (
         <div className="flex flex-col items-center gap-8">
           <motion.div
-            className={`w-40 h-40 rounded-full border-2 ${ringColor} shadow-lg ${glowColor}`}
+            className={`w-80 h-80 rounded-full border-2 ${ringColor} shadow-lg ${glowColor}`}
             animate={{ scale: circleScale }}
             transition={circleTransition}
             initial={{ scale: 0.6 }}
