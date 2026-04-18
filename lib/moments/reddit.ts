@@ -92,30 +92,112 @@ function isRelevantPost(post: RedditPost["data"]): boolean {
   return boostCount > 0 || post.num_comments >= 10;
 }
 
+/** Cache the OAuth token in-memory (survives across requests on Fluid Compute) */
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getRedditToken(): Promise<string | null> {
+  const clientId = process.env.REDDIT_CLIENT_ID;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  // Reuse cached token if still valid (with 60s buffer)
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+    return cachedToken.token;
+  }
+
+  const res = await fetch("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      "User-Agent": "JustB/1.0 (by zkhowes)",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!res.ok) {
+    console.warn(`[Reddit] OAuth token request failed: ${res.status}`);
+    return null;
+  }
+
+  const data = await res.json();
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+  return cachedToken.token;
+}
+
 export async function fetchRedditMoments(
   loc: LocationContext
 ): Promise<MomentContext[]> {
   const subreddits = getSubreddits(loc.city);
-
   const allPosts: RedditPost["data"][] = [];
 
-  for (const sub of subreddits.slice(0, 2)) {
+  // Try OAuth first (works from Vercel IPs), fall back to public endpoint
+  const token = await getRedditToken().catch(() => null);
+  const useOAuth = !!token;
+  const baseUrl = useOAuth
+    ? "https://oauth.reddit.com"
+    : "https://www.reddit.com";
+  const headers: Record<string, string> = {
+    "User-Agent": "JustB:1.0.0 (by /u/zkhowes)",
+    Accept: "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  // Without OAuth, limit to 1 subreddit and fewer posts to reduce rate-limit risk
+  const maxSubs = useOAuth ? 2 : 1;
+  const postLimit = useOAuth ? 25 : 15;
+
+  for (const sub of subreddits.slice(0, maxSubs)) {
     try {
-      const res = await fetch(
-        `https://www.reddit.com/r/${sub}/hot.json?limit=25`,
-        {
-          headers: {
-            "User-Agent": "JustB/1.0 (by zkhowes)",
-          },
-        }
-      );
-      if (!res.ok) continue;
+      const url = useOAuth
+        ? `${baseUrl}/r/${sub}/hot.json?limit=${postLimit}`
+        : `${baseUrl}/r/${sub}/hot.json?limit=${postLimit}&raw_json=1`;
+      const res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (res.status === 429) {
+        console.warn(`[Reddit] r/${sub} rate-limited (429), skipping`);
+        break; // Don't try more subs if rate-limited
+      }
+      if (res.status === 403) {
+        console.warn(`[Reddit] r/${sub} blocked (403) — may need OAuth credentials`);
+        break;
+      }
+      if (!res.ok) {
+        console.warn(
+          `[Reddit] r/${sub} returned ${res.status} ${res.statusText}`
+        );
+        continue;
+      }
+
+      // Verify we got JSON, not HTML (Reddit sometimes returns login pages)
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("json")) {
+        console.warn(`[Reddit] r/${sub} returned non-JSON content-type: ${contentType}`);
+        continue;
+      }
+
       const data: RedditListing = await res.json();
       const posts = data.data.children
         .map((c) => c.data)
         .filter(isRelevantPost);
+      console.log(
+        `[Reddit] r/${sub}: ${data.data.children.length} posts, ${posts.length} passed filter`
+      );
       allPosts.push(...posts);
-    } catch {
+    } catch (err) {
+      console.error(
+        `[Reddit] r/${sub} error:`,
+        err instanceof Error ? err.message : err
+      );
       continue;
     }
   }
