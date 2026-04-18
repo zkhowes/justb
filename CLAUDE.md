@@ -79,6 +79,12 @@ The sky provider now includes:
 - **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
 
+### Done (2026-04-18)
+- Community events provider — Socrata SODA open data for NYC, Chicago, LA, Seattle (farmers markets, street fairs, festivals)
+- Reddit unauthenticated path fix — proper headers, rate-limit handling, content-type validation
+- Local news provider wired into orchestrator (was previously untracked)
+- All 3 community sources (Reddit, local news, city open data) now run in parallel
+
 ### Done (2026-03-31)
 - Admin debug/monitoring tab — full feed trace with per-provider params, responses, timing, LLM prompt/response, and per-card user feedback
 - Fix dark mode card text contrast (white text on night glassmorphism cards)
