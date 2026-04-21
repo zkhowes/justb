@@ -187,7 +187,7 @@ export async function generateFeedWithTrace(
     traceProvider("sports", "sports", { city, dateISO, espnUrl: `https://site.api.espn.com/apis/site/v2/sports/{league}/scoreboard?dates=${dateISO.replace(/-/g, "")}`, leagues: ["NBA", "NFL", "MLB", "NHL", "MLS"] }, () => fetchSportsMoments(loc)),
     traceProvider("events", "events, culture", { city, lat, lng, dateISO, hasTicketmaster: !!process.env.TICKETMASTER_API_KEY, hasSeatGeek: !!process.env.SEATGEEK_CLIENT_ID }, () => fetchEventMoments(loc)),
     traceProvider("history", "history", { city, dateISO, wikimediaUrl: `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${String(parsed.getUTCMonth() + 1).padStart(2, "0")}/${String(parsed.getUTCDate()).padStart(2, "0")}`, wikiUrl: `https://en.wikipedia.org/w/api.php?action=query&titles=History of ${city.split(",")[0].trim()}` }, () => fetchHistoryMoments(loc)),
-    traceProvider("reddit", "community", { city, subreddits: getSubredditsForDebug(city), url: `https://www.reddit.com/r/{subreddit}/hot.json?limit=25` }, () => fetchRedditMoments(loc)),
+    traceProvider("reddit", "community", { city, subreddits: getSubredditsForDebug(city), source: "arctic-shift", url: `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit={subreddit}&sort=desc&limit=100&after=<48h ago>` }, () => fetchRedditMoments(loc)),
   ]);
 
   const providerTraces = [weatherTrace, skyResult.trace, sportsResult.trace, eventsResult.trace, historyResult.trace, redditResult.trace];

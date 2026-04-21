@@ -1,29 +1,22 @@
 import { MomentContext, LocationContext } from "./types";
 
-interface RedditPost {
-  data: {
-    title: string;
-    selftext: string;
-    score: number;
-    num_comments: number;
-    created_utc: number;
-    link_flair_text?: string;
-    url: string;
-    is_self: boolean;
-    over_18: boolean;
-  };
+interface ArcticShiftPost {
+  title: string;
+  selftext: string;
+  score: number;
+  num_comments: number;
+  created_utc: number;
+  link_flair_text?: string | null;
+  url: string;
+  is_self: boolean;
+  over_18: boolean;
 }
 
-interface RedditListing {
-  data: {
-    children: RedditPost[];
-  };
+interface ArcticShiftResponse {
+  data: ArcticShiftPost[] | null;
+  error?: string;
 }
 
-/**
- * Map common city names to their subreddit(s).
- * Reddit city subs don't always match the city name exactly.
- */
 const CITY_SUBREDDITS: Record<string, string[]> = {
   seattle: ["Seattle", "seattlewa"],
   portland: ["Portland"],
@@ -51,33 +44,30 @@ const CITY_SUBREDDITS: Record<string, string[]> = {
 
 function getSubreddits(city: string): string[] {
   const key = city.split(",")[0].trim().toLowerCase();
-  // Direct match first
   if (CITY_SUBREDDITS[key]) return CITY_SUBREDDITS[key];
-  // Partial match
   for (const [name, subs] of Object.entries(CITY_SUBREDDITS)) {
     if (key.includes(name) || name.includes(key)) return subs;
   }
-  // Fallback: try the city name as a subreddit
   return [key.replace(/\s+/g, "")];
 }
 
-/** Filters for posts that signal local/timely info */
-function isRelevantPost(post: RedditPost["data"]): boolean {
+// Arctic Shift snapshots posts soon after creation, so scores are often low.
+// Use a lenient threshold and lean on keyword/engagement signals instead.
+function isRelevantPost(post: ArcticShiftPost): boolean {
   if (post.over_18) return false;
-  if (post.score < 5) return false;
+  if (post.score < 2 && post.num_comments < 3) return false;
 
-  const text = `${post.title} ${post.selftext}`.toLowerCase();
+  const text = `${post.title} ${post.selftext ?? ""}`.toLowerCase();
 
-  // Skip generic complaints, memes, photos with no info
   const skipPatterns = [
     /\b(rant|vent|unpopular opinion)\b/,
     /\b(moving to|should i move)\b/,
     /\b(landlord|rent increase)\b/,
     /\b(meme|shitpost)\b/,
+    /\[\s*removed by moderator\s*\]/,
   ];
   if (skipPatterns.some((p) => p.test(text))) return false;
 
-  // Boost posts that mention timely/local signals
   const boostPatterns = [
     /\b(today|tonight|this weekend|this morning|happening now)\b/,
     /\b(open|opening|new|pop.?up|farmers.?market)\b/,
@@ -88,131 +78,65 @@ function isRelevantPost(post: RedditPost["data"]): boolean {
   ];
   const boostCount = boostPatterns.filter((p) => p.test(text)).length;
 
-  // Require at least some engagement and relevance signal
-  return boostCount > 0 || post.num_comments >= 10;
+  return boostCount > 0 || post.num_comments >= 5;
 }
 
-/** Cache the OAuth token in-memory (survives across requests on Fluid Compute) */
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
-async function getRedditToken(): Promise<string | null> {
-  const clientId = process.env.REDDIT_CLIENT_ID;
-  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-
-  // Reuse cached token if still valid (with 60s buffer)
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
-    return cachedToken.token;
-  }
-
-  const res = await fetch("https://www.reddit.com/api/v1/access_token", {
-    method: "POST",
+async function fetchSubreddit(
+  sub: string,
+  afterTs: number
+): Promise<ArcticShiftPost[]> {
+  const url = `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=${encodeURIComponent(sub)}&sort=desc&limit=100&after=${afterTs}`;
+  const res = await fetch(url, {
     headers: {
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-      "User-Agent": "JustB/1.0 (by zkhowes)",
-      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "JustB/1.0 (https://justb.zkhowes.fun)",
+      Accept: "application/json",
     },
-    body: "grant_type=client_credentials",
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(10_000),
   });
-
   if (!res.ok) {
-    console.warn(`[Reddit] OAuth token request failed: ${res.status}`);
-    return null;
+    console.warn(`[Reddit/ArcticShift] r/${sub} returned ${res.status}`);
+    return [];
   }
-
-  const data = await res.json();
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  };
-  return cachedToken.token;
+  const body: ArcticShiftResponse = await res.json();
+  if (!body.data) {
+    console.warn(`[Reddit/ArcticShift] r/${sub} error: ${body.error ?? "no data"}`);
+    return [];
+  }
+  console.log(`[Reddit/ArcticShift] r/${sub}: ${body.data.length} posts in window`);
+  return body.data;
 }
 
 export async function fetchRedditMoments(
   loc: LocationContext
 ): Promise<MomentContext[]> {
   const subreddits = getSubreddits(loc.city);
-  const allPosts: RedditPost["data"][] = [];
+  const afterTs = Math.floor(Date.now() / 1000) - 48 * 3600;
 
-  // Try OAuth first (works from Vercel IPs), fall back to public endpoint
-  const token = await getRedditToken().catch(() => null);
-  const useOAuth = !!token;
-  const baseUrl = useOAuth
-    ? "https://oauth.reddit.com"
-    : "https://www.reddit.com";
-  const headers: Record<string, string> = {
-    "User-Agent": "JustB:1.0.0 (by /u/zkhowes)",
-    Accept: "application/json",
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+  const results = await Promise.allSettled(
+    subreddits.slice(0, 2).map((sub) => fetchSubreddit(sub, afterTs))
+  );
+
+  const allPosts: ArcticShiftPost[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") allPosts.push(...r.value);
   }
 
-  // Without OAuth, limit to 1 subreddit and fewer posts to reduce rate-limit risk
-  const maxSubs = useOAuth ? 2 : 1;
-  const postLimit = useOAuth ? 25 : 15;
+  const relevant = allPosts.filter(isRelevantPost);
+  console.log(
+    `[Reddit/ArcticShift] ${allPosts.length} total posts, ${relevant.length} passed filter`
+  );
+  if (relevant.length === 0) return [];
 
-  for (const sub of subreddits.slice(0, maxSubs)) {
-    try {
-      const url = useOAuth
-        ? `${baseUrl}/r/${sub}/hot.json?limit=${postLimit}`
-        : `${baseUrl}/r/${sub}/hot.json?limit=${postLimit}&raw_json=1`;
-      const res = await fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (res.status === 429) {
-        console.warn(`[Reddit] r/${sub} rate-limited (429), skipping`);
-        break; // Don't try more subs if rate-limited
-      }
-      if (res.status === 403) {
-        console.warn(`[Reddit] r/${sub} blocked (403) — may need OAuth credentials`);
-        break;
-      }
-      if (!res.ok) {
-        console.warn(
-          `[Reddit] r/${sub} returned ${res.status} ${res.statusText}`
-        );
-        continue;
-      }
-
-      // Verify we got JSON, not HTML (Reddit sometimes returns login pages)
-      const contentType = res.headers.get("content-type") ?? "";
-      if (!contentType.includes("json")) {
-        console.warn(`[Reddit] r/${sub} returned non-JSON content-type: ${contentType}`);
-        continue;
-      }
-
-      const data: RedditListing = await res.json();
-      const posts = data.data.children
-        .map((c) => c.data)
-        .filter(isRelevantPost);
-      console.log(
-        `[Reddit] r/${sub}: ${data.data.children.length} posts, ${posts.length} passed filter`
-      );
-      allPosts.push(...posts);
-    } catch (err) {
-      console.error(
-        `[Reddit] r/${sub} error:`,
-        err instanceof Error ? err.message : err
-      );
-      continue;
-    }
-  }
-
-  if (allPosts.length === 0) return [];
-
-  // Sort by relevance (score * recency)
   const now = Date.now() / 1000;
-  allPosts.sort((a, b) => {
-    const ageA = Math.max(1, (now - a.created_utc) / 3600); // hours old
+  relevant.sort((a, b) => {
+    const ageA = Math.max(1, (now - a.created_utc) / 3600);
     const ageB = Math.max(1, (now - b.created_utc) / 3600);
-    return b.score / ageB - a.score / ageA;
+    const engA = a.score + a.num_comments * 2;
+    const engB = b.score + b.num_comments * 2;
+    return engB / ageB - engA / ageA;
   });
 
-  const top = allPosts.slice(0, 5);
+  const top = relevant.slice(0, 5);
   const lines = top.map((p) => {
     const flair = p.link_flair_text ? `[${p.link_flair_text}] ` : "";
     const preview = p.selftext
@@ -225,7 +149,7 @@ export async function fetchRedditMoments(
     {
       category: "community",
       source: "reddit",
-      data: `Trending on r/${subreddits[0]} today:\n${lines.join("\n")}\n\nPick the 1-2 most interesting/useful items for someone living in ${loc.city}. Skip complaints, housing posts, and generic questions. Focus on things happening today, local discoveries, or timely PSAs. Write as a knowledgeable local friend sharing useful intel.`,
+      data: `Recent on r/${subreddits[0]} (last 48h):\n${lines.join("\n")}\n\nPick the 1-2 most interesting/useful items for someone living in ${loc.city}. Skip complaints, housing posts, and generic questions. Focus on things happening today, local discoveries, or timely PSAs. Write as a knowledgeable local friend sharing useful intel.`,
     },
   ];
 }
