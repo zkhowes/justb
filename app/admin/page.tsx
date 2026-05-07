@@ -14,6 +14,7 @@ import {
   Globe,
   Database,
 } from "lucide-react";
+import { useDisplayPrefs, DEFAULT_PREFS, type DisplayPrefs } from "@/lib/display-prefs";
 
 interface Stats {
   feedbackCounts: Array<{
@@ -85,7 +86,7 @@ interface FeedDebugTrace {
   cards: CardTrace[];
 }
 
-type Tab = "overview" | "debug";
+type Tab = "overview" | "debug" | "display";
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -256,7 +257,7 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className="border-b border-[var(--border)]">
         <div className="max-w-3xl mx-auto px-4 flex gap-1">
-          {(["overview", "debug"] as Tab[]).map((t) => (
+          {(["overview", "debug", "display"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -266,19 +267,20 @@ export default function AdminPage() {
                   : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               }`}
             >
-              {t === "overview" ? "Overview" : "Debug"}
+              {t === "overview" ? "Overview" : t === "debug" ? "Debug" : "Display"}
             </button>
           ))}
         </div>
       </div>
 
-      {tab === "overview" ? (
+      {tab === "overview" && (
         <OverviewTab
           stats={stats}
           feedbackTable={feedbackTable}
           maxDailyCount={maxDailyCount}
         />
-      ) : (
+      )}
+      {tab === "debug" && (
         <DebugTab
           debugCity={debugCity}
           setDebugCity={setDebugCity}
@@ -290,7 +292,89 @@ export default function AdminPage() {
           onRun={runDebugFeed}
         />
       )}
+      {tab === "display" && <DisplayTab />}
     </main>
+  );
+}
+
+// --- Display Tab ---
+
+function DisplayTab() {
+  const [prefs, setPrefs] = useDisplayPrefs();
+
+  const toggles: { key: keyof DisplayPrefs; label: string; help: string }[] = [
+    {
+      key: "newFeed",
+      label: "New feed renderer",
+      help: "Master switch — turn off to fall back to the original card layout (image → title → body, every card the same).",
+    },
+    {
+      key: "variants",
+      label: "Card variants",
+      help: "Vary card layouts by category and position — hero, quote, stat, minimal. Requires New feed renderer.",
+    },
+    {
+      key: "chips",
+      label: "Fact chips",
+      help: "Show 1–3 short structured facts (e.g. \"8pm tonight\", \"$25\", \"sunset 7:42pm\") above the card body. Requires New feed renderer.",
+    },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 mt-6 space-y-6">
+      <section>
+        <h2 className="font-serif text-lg font-semibold mb-1">Feed Display</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-5">
+          Toggles persist in your browser only — these don&apos;t affect other users.
+        </p>
+
+        <div className="space-y-3">
+          {toggles.map((t) => {
+            const value = prefs[t.key];
+            const dependsOnNewFeed = t.key !== "newFeed";
+            const disabled = dependsOnNewFeed && !prefs.newFeed;
+            return (
+              <div
+                key={t.key}
+                className={`flex items-start justify-between gap-4 p-4 rounded-xl border border-[var(--border)] ${
+                  disabled ? "opacity-50" : ""
+                }`}
+              >
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{t.label}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">
+                    {t.help}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={value}
+                  disabled={disabled}
+                  onClick={() => setPrefs({ [t.key]: !value })}
+                  className={`relative shrink-0 w-11 h-6 rounded-full transition ${
+                    value ? "bg-blue-600" : "bg-[var(--border)]"
+                  } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      value ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => setPrefs(DEFAULT_PREFS)}
+          className="mt-4 text-xs text-blue-600 hover:underline"
+        >
+          Reset to defaults
+        </button>
+      </section>
+    </div>
   );
 }
 

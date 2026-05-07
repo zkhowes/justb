@@ -9,6 +9,7 @@ import { FeedSkeleton } from "@/components/feed-skeleton";
 import { LocationInput } from "@/components/location-input";
 import { BreathingExercise } from "@/components/breathing-exercise";
 import { Glyphs } from "@/components/glyphs";
+import { useDisplayPrefs } from "@/lib/display-prefs";
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
@@ -77,6 +78,7 @@ export default function Home() {
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const { gradient, isNight } = useMemo(() => getTimeOfDayGradient(), []);
+  const [displayPrefs] = useDisplayPrefs();
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -475,7 +477,15 @@ export default function Home() {
           <div className="space-y-6">
             {items.map((item, i) => (
               <div key={item.id} data-card-index={i}>
-                <FeedCard item={item} index={i} city={city || undefined} isNight={isNight} />
+                <FeedCard
+                  item={item}
+                  index={i}
+                  city={city || undefined}
+                  isNight={isNight}
+                  newRenderer={displayPrefs.newFeed}
+                  variants={displayPrefs.variants}
+                  chips={displayPrefs.chips}
+                />
               </div>
             ))}
           </div>

@@ -2,6 +2,7 @@ import { anthropic } from "./anthropic";
 import { geocodeCity } from "./geocode";
 import { getAstroData } from "./astro";
 import { fetchWeather } from "./moments/weather";
+import { fetchTides } from "./moments/tides";
 import { fetchSkyMoments } from "./moments/sky";
 import { fetchSportsMoments } from "./moments/sports";
 import { fetchEventMoments } from "./moments/events";
@@ -305,13 +306,37 @@ Tone: knowledgeable local friend. No HTML tags.`;
   });
 
   // 9. Glyphs
-  const astro = getAstroData(lat, lng, new Date(), timezone);
+  const glyphErrors: GlyphData["errors"] = {};
+  const glyphNotes: GlyphData["notes"] = {};
+  let astro: ReturnType<typeof getAstroData> | null = null;
+  try {
+    astro = getAstroData(lat, lng, new Date(), timezone);
+  } catch (e) {
+    glyphErrors.astro = e instanceof Error ? e.message : String(e);
+  }
+  if (!weatherResult) glyphErrors.weather = "open-meteo returned no data";
+
+  const tideRes = await fetchTides(lat, lng, timezone);
+  let tide: GlyphData["tide"] = null;
+  if (tideRes.ok) {
+    if (tideRes.data) {
+      tide = { state: tideRes.data.state, nextHigh: tideRes.data.nextHigh, nextLow: tideRes.data.nextLow };
+    } else if (tideRes.reason) {
+      glyphNotes.tide = tideRes.reason;
+    }
+  } else {
+    glyphErrors.tide = tideRes.error;
+  }
+
   const glyphs: GlyphData = {
     weather: weatherResult ? { temp: weatherResult.temp, code: weatherResult.code } : null,
-    sunrise: astro.sunrise,
-    sunset: astro.sunset,
-    moonPhase: astro.moonPhase,
-    moonIllumination: astro.moonIllumination,
+    sunrise: astro?.sunrise ?? "",
+    sunset: astro?.sunset ?? "",
+    moonPhase: astro?.moonPhase ?? "",
+    moonIllumination: astro?.moonIllumination ?? 0,
+    tide,
+    errors: glyphErrors,
+    notes: glyphNotes,
   };
 
   return {

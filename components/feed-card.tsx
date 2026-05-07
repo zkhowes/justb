@@ -24,6 +24,7 @@ const gradients: Record<Category, string> = {
 };
 
 type Rating = "good" | "irrelevant" | "inaccurate";
+type Variant = "hero" | "quote" | "stat" | "minimal" | "standard";
 
 const INACCURACY_REASONS = [
   "Wrong time/date",
@@ -31,6 +32,34 @@ const INACCURACY_REASONS = [
   "Not my city",
   "Other",
 ] as const;
+
+function pickVariant(item: FeedItem, index: number): Variant {
+  if (index === 0 && item.imageUrl) return "hero";
+  if (item.category === "history" || item.category === "culture") return "quote";
+  if (item.category === "sky" || item.category === "space" || item.category === "sports") return "stat";
+  if (item.category === "community" || item.category === "food") return "minimal";
+  return "standard";
+}
+
+function Chips({ facts, isNight }: { facts: string[]; isNight: boolean }) {
+  if (!facts || facts.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-2">
+      {facts.map((f, i) => (
+        <span
+          key={i}
+          className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+            isNight
+              ? "border-white/20 bg-white/10 text-white/85"
+              : "border-black/10 bg-black/5 text-[var(--text-secondary)]"
+          }`}
+        >
+          {f}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
   const [selected, setSelected] = useState<Rating | null>(null);
@@ -81,7 +110,7 @@ function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
   ];
 
   return (
-    <div className="pt-3 border-t border-[var(--border)]/50">
+    <div className="pt-3 mt-3 border-t border-[var(--border)]/50">
       <div className="flex items-center gap-1">
         {buttons.map(({ rating, icon: Icon, color, activeColor }) => (
           <button
@@ -126,86 +155,195 @@ export function FeedCard({
   index,
   city,
   isNight,
+  newRenderer = true,
+  variants = true,
+  chips = true,
 }: {
   item: FeedItem;
   index: number;
   city?: string;
   isNight?: boolean;
+  newRenderer?: boolean;
+  variants?: boolean;
+  chips?: boolean;
 }) {
   const Icon = categoryConfig[item.category]?.icon;
   const gradient = gradients[item.category] || "from-gray-700 to-gray-500";
+  const showChips = newRenderer && chips && !!item.facts && item.facts.length > 0;
+  const variant: Variant = newRenderer && variants ? pickVariant(item, index) : "standard";
+  const night = !!isNight;
 
+  const wrapperClasses = `rounded-xl overflow-hidden backdrop-blur-xl border ${
+    night
+      ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
+      : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
+  }`;
+
+  const animation = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4, delay: index * 0.08, ease: "easeOut" as const },
+  };
+
+  // --- Variant: hero (index 0, has image) ---
+  if (variant === "hero" && item.imageUrl) {
+    return (
+      <motion.article {...animation} className={wrapperClasses}>
+        <div className="relative h-72 overflow-hidden">
+          <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
+          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+          {item.confidence === "low" && <VerifyBadge />}
+          <div className="absolute bottom-0 left-0 right-0 p-5">
+            {showChips && <Chips facts={item.facts!} isNight={true} />}
+            <h2 className="font-serif text-2xl font-bold leading-tight text-white drop-shadow">
+              {item.title}
+            </h2>
+          </div>
+        </div>
+        <div className="p-5">
+          <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
+             style={night ? undefined : { color: "var(--text-secondary)" }}>
+            {item.body}
+          </p>
+          {isPreview && city && <FeedbackRow item={item} city={city} />}
+        </div>
+      </motion.article>
+    );
+  }
+
+  // --- Variant: quote (history, culture) ---
+  if (variant === "quote") {
+    return (
+      <motion.article {...animation} className={wrapperClasses}>
+        <div className={`relative bg-gradient-to-br ${gradient} p-6`}>
+          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+          {item.confidence === "low" && <VerifyBadge />}
+          <div className="pt-8">
+            {showChips && <Chips facts={item.facts!} isNight={true} />}
+            <p className="font-serif italic text-xl leading-snug text-white/95 mb-3">
+              &ldquo;{item.title}&rdquo;
+            </p>
+            <p className="text-sm leading-relaxed text-white/80">{item.body}</p>
+          </div>
+        </div>
+        {isPreview && city && (
+          <div className="px-5 pb-3 pt-0">
+            <FeedbackRow item={item} city={city} />
+          </div>
+        )}
+      </motion.article>
+    );
+  }
+
+  // --- Variant: stat (sky, space, sports) — first fact becomes the headline number ---
+  if (variant === "stat") {
+    const headline = item.facts && item.facts.length > 0 ? item.facts[0] : null;
+    const restFacts = item.facts ? item.facts.slice(1) : [];
+    return (
+      <motion.article {...animation} className={wrapperClasses}>
+        {item.imageUrl ? (
+          <div className="relative h-32 overflow-hidden">
+            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+            {item.confidence === "low" && <VerifyBadge />}
+          </div>
+        ) : (
+          <div className={`relative h-16 bg-gradient-to-br ${gradient}`}>
+            <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+            {item.confidence === "low" && <VerifyBadge />}
+          </div>
+        )}
+        <div className="p-5">
+          {newRenderer && headline && (
+            <p className={`font-serif text-3xl font-bold leading-none mb-1 ${
+              night ? "text-white" : "text-[var(--text-primary)]"
+            }`}>
+              {headline}
+            </p>
+          )}
+          <h2 className={`font-serif text-base font-semibold leading-snug mb-2 ${night ? "text-white/90" : ""}`}>
+            {item.title}
+          </h2>
+          {showChips && restFacts.length > 0 && <Chips facts={restFacts} isNight={night} />}
+          <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
+             style={night ? undefined : { color: "var(--text-secondary)" }}>
+            {item.body}
+          </p>
+          {isPreview && city && <FeedbackRow item={item} city={city} />}
+        </div>
+      </motion.article>
+    );
+  }
+
+  // --- Variant: minimal (community, food) — typography-only on gradient ---
+  if (variant === "minimal") {
+    return (
+      <motion.article {...animation} className={wrapperClasses}>
+        <div className={`relative bg-gradient-to-br ${gradient} p-6`}>
+          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+          {item.confidence === "low" && <VerifyBadge />}
+          <div className="pt-8">
+            {showChips && <Chips facts={item.facts!} isNight={true} />}
+            <h2 className="font-serif text-xl font-bold leading-tight text-white mb-2">
+              {item.title}
+            </h2>
+            <p className="text-sm leading-relaxed text-white/85">{item.body}</p>
+            {Icon && (
+              <Icon size={120} className="absolute -bottom-6 -right-6 text-white/10 pointer-events-none" strokeWidth={1.5} />
+            )}
+          </div>
+        </div>
+        {isPreview && city && (
+          <div className="px-5 pb-3">
+            <FeedbackRow item={item} city={city} />
+          </div>
+        )}
+      </motion.article>
+    );
+  }
+
+  // --- Standard (the original layout, used when newRenderer is off OR variant fallback) ---
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.08, ease: "easeOut" }}
-      className={`rounded-xl overflow-hidden backdrop-blur-xl border ${
-        isNight
-          ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
-          : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
-      }`}
-    >
+    <motion.article {...animation} className={wrapperClasses}>
       {item.imageUrl ? (
         <div className="relative h-48 overflow-hidden">
-          <img
-            src={item.imageUrl}
-            alt=""
-            className="w-full h-full object-cover"
-          />
+          <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/30" />
-          <div className="absolute top-3 left-3">
-            <CategoryPill category={item.category} />
-          </div>
-          {item.confidence === "low" && (
-            <div
-              className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/90 text-amber-700"
-              title="This item references time-sensitive info — worth verifying"
-            >
-              <AlertCircle size={10} />
-              verify
-            </div>
-          )}
+          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+          {item.confidence === "low" && <VerifyBadge />}
         </div>
       ) : (
-        <div
-          className={`relative h-24 bg-gradient-to-br ${gradient} flex items-center justify-center`}
-        >
-          {Icon && (
-            <Icon size={48} className="text-white/20" strokeWidth={1.5} />
-          )}
-          <div className="absolute top-3 left-3">
-            <CategoryPill category={item.category} />
-          </div>
-          {item.confidence === "low" && (
-            <div
-              className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/90 text-amber-700"
-              title="This item references time-sensitive info — worth verifying"
-            >
-              <AlertCircle size={10} />
-              verify
-            </div>
-          )}
+        <div className={`relative h-24 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+          {Icon && <Icon size={48} className="text-white/20" strokeWidth={1.5} />}
+          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
+          {item.confidence === "low" && <VerifyBadge />}
         </div>
       )}
       <div className="p-5">
-        <h2
-          className={`font-serif text-lg font-semibold leading-snug mb-2 ${
-            isNight ? "text-white" : ""
-          }`}
-        >
+        <h2 className={`font-serif text-lg font-semibold leading-snug mb-2 ${night ? "text-white" : ""}`}>
           {item.title}
         </h2>
-        <p
-          className={`text-sm leading-relaxed ${
-            isNight ? "text-white/75" : ""
-          }`}
-          style={isNight ? undefined : { color: "var(--text-secondary)" }}
-        >
+        {showChips && <Chips facts={item.facts!} isNight={night} />}
+        <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
+           style={night ? undefined : { color: "var(--text-secondary)" }}>
           {item.body}
         </p>
         {isPreview && city && <FeedbackRow item={item} city={city} />}
       </div>
     </motion.article>
+  );
+}
+
+function VerifyBadge() {
+  return (
+    <div
+      className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/90 text-amber-700"
+      title="This item references time-sensitive info — worth verifying"
+    >
+      <AlertCircle size={10} />
+      verify
+    </div>
   );
 }

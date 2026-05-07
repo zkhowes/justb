@@ -88,7 +88,7 @@ ${llmOnlyCategories.join("\n")}
 - Aim for 10 items, but only include what's genuinely relevant — fewer is fine. Do not pad with generic filler.
 ${recentTopics && recentTopics.length > 0 ? `\n## Recently covered topics (vary your coverage, avoid repeating these):\n${recentTopics.join(", ")}` : ""}
 
-Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search for the SINGLE most visual subject in your body text. If the body mentions multiple things (e.g. cherry blossoms AND returning swallows), pick the ONE most visually striking for the image — do NOT try to summarize everything. Examples: 'cherry blossoms branch closeup' not 'spring nature seattle', 'barn swallow flight' not 'birds flowers'. NEVER use a famous landmark unless the body is actually about that landmark. For sky-space: use the specific constellation or planet name (e.g. 'orion constellation stars' not 'night sky')."}
+Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search for the SINGLE most visual subject in your body text. If the body mentions multiple things (e.g. cherry blossoms AND returning swallows), pick the ONE most visually striking for the image — do NOT try to summarize everything. Examples: 'cherry blossoms branch closeup' not 'spring nature seattle', 'barn swallow flight' not 'birds flowers'. NEVER use a famous landmark unless the body is actually about that landmark. For sky-space: use the specific constellation or planet name (e.g. 'orion constellation stars' not 'night sky').","facts":["1–3 short factual chips, each 1–4 words, extracted from the body or source data. Examples: '8pm tonight', '$25', 'free', '0.6mi', 'sold out', 'sunset 7:42pm', '78 mins in', '1923 — 103 yrs ago', 'bloom peak'. Skip facts already shown elsewhere in the UI (sunrise/sunset/moon are in glyphs). If nothing concrete to surface, return an empty array."]}
 
 Tone: knowledgeable local friend. No HTML tags.`,
       },
@@ -115,7 +115,17 @@ Tone: knowledgeable local friend. No HTML tags.`,
     .map((item) => {
       const cat = normalizeCategory(item.category);
       if (!cat) return null;
-      return { ...item, category: cat };
+      const factsClean = Array.isArray(item.facts)
+        ? item.facts
+            .filter((f): f is string => typeof f === "string")
+            .map((f) => f.trim())
+            .filter((f) => f.length > 0 && f.length <= 30)
+            .slice(0, 3)
+        : null;
+      const normalized: FeedItem = { ...item, category: cat };
+      if (factsClean && factsClean.length > 0) normalized.facts = factsClean;
+      else delete normalized.facts;
+      return normalized;
     })
     .filter((item): item is FeedItem => item !== null);
 

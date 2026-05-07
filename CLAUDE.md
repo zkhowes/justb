@@ -73,9 +73,15 @@ The sky provider now includes:
 
 ### To Investigate
 - **Cross-category blending**: Cards that bridge two categories (e.g. earth-garden + local-scene for farmers markets). Consider `secondaryCategory` field or prompt guidance for intentional crossovers.
-- **Regional events**: Surface notable events within ~2hr drive of the city (e.g. Skagit Valley Tulip Festival for Seattle users). Needs radius expansion or curated regional event mapping.
+- **Regional events / "Zoomed Out" mode**: Tracked in Linear as [ZKH-33 — JustB Zoomed Out](https://linear.app/zkhowes/issue/ZKH-33/justb-zoomed-out-investigate-radius-expansion-for-small-towns). Investigates radius expansion (1–2hr drive) for small towns where the local feed is too sparse; tensions with the "be here, be now" premise.
 - **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
+
+### Done (2026-05-07)
+- Tides in glyph bar — NOAA CO-OPS predictions, free, no API key. Picks nearest of 15 major US coastal stations by great-circle distance; skips with a "note" beyond 150km inland.
+- Glyph error visibility — per-source `errors` and `notes` on `GlyphData`; in dev/preview the glyph bar swaps in amber `⚠ tide / ⚠ weather / ⚠ astro` chips with the underlying error in tooltip + a small diagnostic line under the bar.
+- Card variants + fact chips — new feed renderer with hero/quote/stat/minimal layouts by category and index, plus 1–3 short fact chips per card sourced from a new `facts` field that Haiku now emits.
+- Admin → Display tab — three independent localStorage-backed toggles (newFeed, variants, chips) so the new render path can be A/B'd against the original. Defaults to all on.
 
 ### Done (2026-04-21)
 - Reddit provider migrated to Arctic Shift — Reddit's own API blocks Vercel IPs, OAuth script-app form returns 500, and the commercial Data API ticket has been stuck in review since 2026-04-01. Arctic Shift (community archive) gives ~15-60min-lag data with no auth; provider fetches 48h window and re-ranks client-side by engagement/recency.

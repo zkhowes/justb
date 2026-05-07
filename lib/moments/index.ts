@@ -9,6 +9,7 @@ import { fetchRedditMoments } from "./reddit";
 import { fetchLocalNewsMoments } from "./local-news";
 import { fetchCommunityEventMoments } from "./community-events";
 import { fetchWeather } from "./weather";
+import { fetchTides } from "./tides";
 import { GlyphData } from "../types";
 
 export type { MomentContext, LocationContext };
@@ -30,7 +31,7 @@ export async function gatherAllMoments(
   // Fetch weather first (sky provider needs it), other providers in parallel
   const weatherResult = await fetchWeather(lat, lng);
 
-  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, newsResult, communityEventsResult] =
+  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, newsResult, communityEventsResult, tideResult] =
     await Promise.allSettled([
       fetchSkyMoments(loc, weatherResult),
       fetchSportsMoments(loc),
@@ -39,6 +40,7 @@ export async function gatherAllMoments(
       fetchRedditMoments(loc),
       fetchLocalNewsMoments(loc),
       fetchCommunityEventMoments(loc),
+      fetchTides(lat, lng, timezone),
     ]);
 
   const moments: MomentContext[] = [];
@@ -58,16 +60,48 @@ export async function gatherAllMoments(
   if (newsMoments.length > 0) moments.push(...newsMoments);
   if (communityEventMoments.length > 0) moments.push(...communityEventMoments);
 
-  const astro = getAstroData(lat, lng, new Date(), timezone);
-  const weather = weatherResult;
+  const errors: GlyphData["errors"] = {};
+  const notes: GlyphData["notes"] = {};
+
+  let astro: ReturnType<typeof getAstroData> | null = null;
+  try {
+    astro = getAstroData(lat, lng, new Date(), timezone);
+  } catch (e) {
+    errors.astro = e instanceof Error ? e.message : String(e);
+  }
+
+  if (!weatherResult) errors.weather = "open-meteo returned no data";
+
+  let tide: GlyphData["tide"] = null;
+  if (tideResult.status === "fulfilled") {
+    const r = tideResult.value;
+    if (r.ok) {
+      if (r.data) {
+        tide = { state: r.data.state, nextHigh: r.data.nextHigh, nextLow: r.data.nextLow };
+      } else if (r.reason) {
+        notes.tide = r.reason;
+      }
+    } else {
+      errors.tide = r.error;
+    }
+  } else {
+    errors.tide = tideResult.reason instanceof Error ? tideResult.reason.message : String(tideResult.reason);
+  }
 
   const glyphs: GlyphData = {
-    weather: weather ? { temp: weather.temp, code: weather.code } : null,
-    sunrise: astro.sunrise,
-    sunset: astro.sunset,
-    moonPhase: astro.moonPhase,
-    moonIllumination: astro.moonIllumination,
+    weather: weatherResult ? { temp: weatherResult.temp, code: weatherResult.code } : null,
+    sunrise: astro?.sunrise ?? "",
+    sunset: astro?.sunset ?? "",
+    moonPhase: astro?.moonPhase ?? "",
+    moonIllumination: astro?.moonIllumination ?? 0,
+    tide,
+    errors,
+    notes,
   };
+
+  if (Object.keys(errors).length > 0) {
+    console.warn("[glyphs] errors:", errors);
+  }
 
   return { loc, moments, glyphs };
 }
