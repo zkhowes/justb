@@ -33,9 +33,13 @@ function getTimeOfDayGradient(): { gradient: string; isNight: boolean } {
   }
 }
 
+// v2: added glyphs.tide, glyphs.errors, glyphs.notes, and FeedItem.facts.
+// Bump this any time the cached feed shape changes so stale clients self-heal.
+const FEED_CACHE_VERSION = 2;
+
 function getCacheKey(cityName: string) {
   const dateStr = new Date().toISOString().slice(0, 10);
-  return `justb-feed:${cityName.toLowerCase().trim()}:${dateStr}`;
+  return `justb-feed-v${FEED_CACHE_VERSION}:${cityName.toLowerCase().trim()}:${dateStr}`;
 }
 
 function getRecentTopics(cityName: string): string[] {
@@ -44,7 +48,7 @@ function getRecentTopics(cityName: string): string[] {
   for (let i = 1; i <= 3; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const key = `justb-feed:${cityName.toLowerCase().trim()}:${d.toISOString().slice(0, 10)}`;
+    const key = `justb-feed-v${FEED_CACHE_VERSION}:${cityName.toLowerCase().trim()}:${d.toISOString().slice(0, 10)}`;
     try {
       const cached = localStorage.getItem(key);
       if (!cached) continue;
