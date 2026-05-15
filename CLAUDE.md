@@ -77,6 +77,10 @@ The sky provider now includes:
 - **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
 
+### Done (2026-05-14)
+- Reddit engagement-signal rewrite — Arctic Shift snapshots posts at creation and never updates `score`/`num_comments`, so every post forever shows score=1, num_comments=0 and the old filter rejected everything. Provider now queries the comments endpoint (which DOES accumulate), paginates 5×100 comments per subreddit, groups by `link_id`, fetches the top 25 parent posts by ID, and ranks by recent-comment momentum (time since last comment, not time since post creation).
+- Debug screen completeness — added missing provider rows for `local-news`, `community-events`, and `tides`. These have been running in the real feed since 2026-04-18 but never surfaced in /admin → debug. Tide is glyph-only (doesn't feed the LLM prompt) but now appears with its NOAA result for visibility. Single `fetchTides` call reused between trace + glyph computation.
+
 ### Done (2026-05-07)
 - Tides in glyph bar — NOAA CO-OPS predictions, free, no API key. Picks nearest of 15 major US coastal stations by great-circle distance; skips with a "note" beyond 150km inland.
 - Glyph error visibility — per-source `errors` and `notes` on `GlyphData`; in dev/preview the glyph bar swaps in amber `⚠ tide / ⚠ weather / ⚠ astro` chips with the underlying error in tooltip + a small diagnostic line under the bar.

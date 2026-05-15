@@ -8,6 +8,8 @@ import { fetchSportsMoments } from "./moments/sports";
 import { fetchEventMoments } from "./moments/events";
 import { fetchHistoryMoments } from "./moments/history";
 import { fetchRedditMoments } from "./moments/reddit";
+import { fetchLocalNewsMoments } from "./moments/local-news";
+import { fetchCommunityEventMoments } from "./moments/community-events";
 import { MomentContext, LocationContext } from "./moments/types";
 import { FeedItem, GlyphData, Category } from "./types";
 
@@ -183,23 +185,63 @@ export async function generateFeedWithTrace(
   };
 
   // 3. All providers in parallel with tracing
-  const [skyResult, sportsResult, eventsResult, historyResult, redditResult] = await Promise.all([
+  const tideStart = Date.now();
+  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, localNewsResult, communityEventsResult, tideRes] = await Promise.all([
     traceProvider("sky", "sky, space", { lat, lng, timezone, hasWeather: !!weatherResult }, () => fetchSkyMoments(loc, weatherResult)),
     traceProvider("sports", "sports", { city, dateISO, espnUrl: `https://site.api.espn.com/apis/site/v2/sports/{league}/scoreboard?dates=${dateISO.replace(/-/g, "")}`, leagues: ["NBA", "NFL", "MLB", "NHL", "MLS"] }, () => fetchSportsMoments(loc)),
     traceProvider("events", "events, culture", { city, lat, lng, dateISO, hasTicketmaster: !!process.env.TICKETMASTER_API_KEY, hasSeatGeek: !!process.env.SEATGEEK_CLIENT_ID }, () => fetchEventMoments(loc)),
     traceProvider("history", "history", { city, dateISO, wikimediaUrl: `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${String(parsed.getUTCMonth() + 1).padStart(2, "0")}/${String(parsed.getUTCDate()).padStart(2, "0")}`, wikiUrl: `https://en.wikipedia.org/w/api.php?action=query&titles=History of ${city.split(",")[0].trim()}` }, () => fetchHistoryMoments(loc)),
-    traceProvider("reddit", "community", { city, subreddits: getSubredditsForDebug(city), source: "arctic-shift", url: `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit={subreddit}&sort=desc&limit=100&after=<48h ago>` }, () => fetchRedditMoments(loc)),
+    traceProvider("reddit", "community", { city, subreddits: getSubredditsForDebug(city), source: "arctic-shift", strategy: "comment-volume (scores never update upstream)", commentsUrl: `https://arctic-shift.photon-reddit.com/api/comments/search?subreddit={subreddit}&sort=desc&limit=100&after=<48h ago>&before=<cursor>`, paging: "up to 5 pages × 100 comments per subreddit", postsUrl: `https://arctic-shift.photon-reddit.com/api/posts/ids?ids=<top-25-by-recent-comment-count>` }, () => fetchRedditMoments(loc)),
+    traceProvider("local-news", "community", { city, feeds: getNewsFeedsForDebug(city) }, () => fetchLocalNewsMoments(loc)),
+    traceProvider("community-events", "community", { city, source: "socrata-soda", endpoint: getCommunityEventEndpointForDebug(city), window: "today through +7d" }, () => fetchCommunityEventMoments(loc)),
+    fetchTides(lat, lng, timezone),
   ]);
 
-  const providerTraces = [weatherTrace, skyResult.trace, sportsResult.trace, eventsResult.trace, historyResult.trace, redditResult.trace];
+  // Synthesize a tide provider trace from the raw result (tides are glyph-only,
+  // they don't feed the LLM prompt, but they should still be visible in debug)
+  const tideDuration = Date.now() - tideStart;
+  const tideTrace: ProviderTrace = {
+    name: "tides",
+    category: "glyphs (tide chip)",
+    source: "NOAA CO-OPS",
+    params: { lat, lng, timezone },
+    rawResponse: tideRes.ok
+      ? tideRes.data
+        ? `state=${tideRes.data.state}, nextHigh=${tideRes.data.nextHigh ?? "—"}, nextLow=${tideRes.data.nextLow ?? "—"}`
+        : `no nearby station (${tideRes.reason ?? "unknown"})`
+      : `error: ${tideRes.error}`,
+    promptData: null,
+    contributed: tideRes.ok && !!tideRes.data,
+    decision: tideRes.ok
+      ? tideRes.data
+        ? "Tide data available for glyph bar"
+        : `Skipped: ${tideRes.reason ?? "no nearby station"}`
+      : `Error: ${tideRes.error}`,
+    durationMs: tideDuration,
+    error: tideRes.ok ? null : tideRes.error,
+  };
 
-  // 4. Gather moments
+  const providerTraces = [
+    weatherTrace,
+    skyResult.trace,
+    sportsResult.trace,
+    eventsResult.trace,
+    historyResult.trace,
+    redditResult.trace,
+    localNewsResult.trace,
+    communityEventsResult.trace,
+    tideTrace,
+  ];
+
+  // 4. Gather moments — tides are glyph-only, don't include in LLM prompt moments
   const moments: MomentContext[] = [
     ...skyResult.moments,
     ...sportsResult.moments,
     ...eventsResult.moments,
     ...historyResult.moments,
     ...redditResult.moments,
+    ...localNewsResult.moments,
+    ...communityEventsResult.moments,
   ];
 
   // 5. Determine LLM-only categories
@@ -316,7 +358,6 @@ Tone: knowledgeable local friend. No HTML tags.`;
   }
   if (!weatherResult) glyphErrors.weather = "open-meteo returned no data";
 
-  const tideRes = await fetchTides(lat, lng, timezone);
   let tide: GlyphData["tide"] = null;
   if (tideRes.ok) {
     if (tideRes.data) {
@@ -386,4 +427,79 @@ function getSubredditsForDebug(city: string): string[] {
     if (key.includes(name) || name.includes(key)) return subs;
   }
   return [key.replace(/\s+/g, "")];
+}
+
+// Mirrors the feed list in lib/moments/local-news.ts so debug shows which RSS feeds were tried
+function getNewsFeedsForDebug(city: string): { name: string; url: string }[] {
+  const FEEDS: Record<string, { name: string; url: string }[]> = {
+    seattle: [
+      { name: "The Stranger", url: "https://www.thestranger.com/rss/news" },
+      { name: "Seattle Times", url: "https://www.seattletimes.com/feed/" },
+    ],
+    portland: [
+      { name: "OregonLive", url: "https://www.oregonlive.com/arc/outboundfeeds/rss/?outputType=xml" },
+      { name: "Willamette Week", url: "https://www.wweek.com/feed/" },
+    ],
+    "san francisco": [
+      { name: "SFGate", url: "https://www.sfgate.com/feed/sfgate/rss.xml" },
+      { name: "SF Chronicle", url: "https://www.sfchronicle.com/feed/sfgate/rss.xml" },
+    ],
+    "los angeles": [
+      { name: "LAist", url: "https://laist.com/feed" },
+      { name: "LA Times", url: "https://www.latimes.com/local/rss2.0.xml" },
+    ],
+    "new york": [
+      { name: "Gothamist", url: "https://gothamist.com/feed" },
+      { name: "amNY", url: "https://www.amny.com/feed/" },
+    ],
+    chicago: [
+      { name: "Block Club Chicago", url: "https://blockclubchicago.org/feed/" },
+      { name: "Chicago Sun-Times", url: "https://chicago.suntimes.com/rss/index.xml" },
+    ],
+    austin: [{ name: "Austin Chronicle", url: "https://www.austinchronicle.com/gyrobase/feed" }],
+    denver: [
+      { name: "Westword", url: "https://www.westword.com/denver/Rss.xml" },
+      { name: "Denver Post", url: "https://www.denverpost.com/feed/" },
+    ],
+    boston: [{ name: "Boston Globe", url: "https://www.bostonglobe.com/arc/outboundfeeds/rss/?outputType=xml" }],
+    nashville: [{ name: "Nashville Scene", url: "https://www.nashvillescene.com/nashville/Rss.xml" }],
+    "washington dc": [
+      { name: "DCist", url: "https://dcist.com/feed" },
+      { name: "Washington City Paper", url: "https://washingtoncitypaper.com/feed/" },
+    ],
+    atlanta: [{ name: "Atlanta Journal-Constitution", url: "https://www.ajc.com/arc/outboundfeeds/rss/?outputType=xml" }],
+    miami: [{ name: "Miami New Times", url: "https://www.miaminewtimes.com/miami/Rss.xml" }],
+    minneapolis: [
+      { name: "City Pages / Racket", url: "https://racketmn.com/feed/" },
+      { name: "Star Tribune", url: "https://www.startribune.com/local/feed/" },
+    ],
+    philadelphia: [{ name: "Billy Penn", url: "https://billypenn.com/feed/" }],
+    pittsburgh: [{ name: "Pittsburgh Post-Gazette", url: "https://www.post-gazette.com/rss/local" }],
+    "salt lake city": [{ name: "Salt Lake Tribune", url: "https://www.sltrib.com/feed/" }],
+    "san diego": [{ name: "San Diego Union-Tribune", url: "https://www.sandiegouniontribune.com/feed/" }],
+    houston: [{ name: "Houston Chronicle", url: "https://www.houstonchronicle.com/feed/sfgate/rss.xml" }],
+    dallas: [{ name: "Dallas Observer", url: "https://www.dallasobserver.com/dallas/Rss.xml" }],
+  };
+  const key = city.split(",")[0].trim().toLowerCase();
+  if (FEEDS[key]) return FEEDS[key];
+  for (const [name, feeds] of Object.entries(FEEDS)) {
+    if (key.includes(name) || name.includes(key)) return feeds;
+  }
+  return [];
+}
+
+// Mirrors the source map in lib/moments/community-events.ts so debug shows which Socrata endpoint was hit
+function getCommunityEventEndpointForDebug(city: string): string {
+  const ENDPOINTS: Record<string, string> = {
+    "new york": "https://data.cityofnewyork.us/resource/tvpp-9vvx.json",
+    chicago: "https://data.cityofchicago.org/resource/xgse-8eg7.json",
+    "los angeles": "https://data.lacity.org/resource/8spw-3fhx.json",
+    seattle: "https://data.seattle.gov/resource/dm95-f8w5.json",
+  };
+  const key = city.split(",")[0].trim().toLowerCase();
+  if (ENDPOINTS[key]) return ENDPOINTS[key];
+  for (const [name, ep] of Object.entries(ENDPOINTS)) {
+    if (key.includes(name) || name.includes(key)) return ep;
+  }
+  return "(no Socrata endpoint for this city — provider will return [])";
 }
