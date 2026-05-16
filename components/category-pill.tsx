@@ -12,6 +12,10 @@ import {
   Users,
   Trophy,
   Music,
+  CalendarDays,
+  Waves,
+  Wind,
+  Siren,
   LucideIcon,
 } from "lucide-react";
 
@@ -90,6 +94,30 @@ const categoryConfig: Record<
     color: "var(--cat-community)",
     bg: "var(--cat-community-bg)",
     icon: Users,
+  },
+  happenings: {
+    label: "Happenings",
+    color: "var(--cat-happenings)",
+    bg: "var(--cat-happenings-bg)",
+    icon: CalendarDays,
+  },
+  water: {
+    label: "Water",
+    color: "var(--cat-water)",
+    bg: "var(--cat-water-bg)",
+    icon: Waves,
+  },
+  air: {
+    label: "Air",
+    color: "var(--cat-air)",
+    bg: "var(--cat-air-bg)",
+    icon: Wind,
+  },
+  civic: {
+    label: "Civic",
+    color: "var(--cat-civic)",
+    bg: "var(--cat-civic-bg)",
+    icon: Siren,
   },
 };
 

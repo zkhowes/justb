@@ -21,6 +21,10 @@ const gradients: Record<Category, string> = {
   culture: "from-purple-700 to-purple-500",
   food: "from-orange-700 to-orange-500",
   community: "from-teal-700 to-teal-500",
+  happenings: "from-rose-700 to-pink-500",
+  water: "from-sky-800 to-cyan-600",
+  air: "from-indigo-700 to-sky-500",
+  civic: "from-red-900 to-red-600",
 };
 
 type Rating = "good" | "irrelevant" | "inaccurate";
@@ -36,8 +40,8 @@ const INACCURACY_REASONS = [
 function pickVariant(item: FeedItem, index: number): Variant {
   if (index === 0 && item.imageUrl) return "hero";
   if (item.category === "history" || item.category === "culture") return "quote";
-  if (item.category === "sky" || item.category === "space" || item.category === "sports") return "stat";
-  if (item.category === "community" || item.category === "food") return "minimal";
+  if (item.category === "sky" || item.category === "space" || item.category === "sports" || item.category === "water" || item.category === "air" || item.category === "civic") return "stat";
+  if (item.category === "community" || item.category === "food" || item.category === "happenings") return "minimal";
   return "standard";
 }
 

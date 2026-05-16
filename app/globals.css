@@ -38,6 +38,14 @@
   --cat-food-bg: #fff3e8;
   --cat-community: #0d7377;
   --cat-community-bg: #e6f5f5;
+  --cat-happenings: #be185d;
+  --cat-happenings-bg: #fdf2f8;
+  --cat-water: #0369a1;
+  --cat-water-bg: #e0f2fe;
+  --cat-air: #4f46e5;
+  --cat-air-bg: #eef2ff;
+  --cat-civic: #7f1d1d;
+  --cat-civic-bg: #fef2f2;
 }
 
 body {

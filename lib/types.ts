@@ -10,7 +10,11 @@ export type Category =
   | "history"
   | "culture"
   | "food"
-  | "community";
+  | "community"
+  | "happenings"
+  | "water"
+  | "air"
+  | "civic";
 
 export type GlyphData = {
   weather: { temp: number; code: number } | null;
@@ -23,15 +27,33 @@ export type GlyphData = {
     nextHigh: string | null;
     nextLow: string | null;
   } | null;
+  air?: {
+    label: string;
+    value?: string;
+  } | null;
+  water?: {
+    label: string;
+    value?: string;
+  } | null;
+  alerts?: {
+    count: number;
+    label: string;
+  } | null;
   /** Per-source diagnostics so the UI can surface failures rather than silently hiding them */
   errors: {
     weather?: string;
     astro?: string;
     tide?: string;
+    air?: string;
+    water?: string;
+    alerts?: string;
   };
   /** Reason a non-error field is null (e.g. tide skipped because inland) — for transparency */
   notes: {
     tide?: string;
+    air?: string;
+    water?: string;
+    alerts?: string;
   };
 };
 

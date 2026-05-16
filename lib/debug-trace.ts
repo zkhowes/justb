@@ -10,6 +10,9 @@ import { fetchHistoryMoments } from "./moments/history";
 import { fetchRedditMoments } from "./moments/reddit";
 import { fetchLocalNewsMoments } from "./moments/local-news";
 import { fetchCommunityEventMoments } from "./moments/community-events";
+import { fetchAirQualityMoments } from "./moments/air-quality";
+import { fetchWaterMoments } from "./moments/water";
+import { fetchAlertMoments } from "./moments/alerts";
 import { MomentContext, LocationContext } from "./moments/types";
 import { FeedItem, GlyphData, Category } from "./types";
 
@@ -84,7 +87,8 @@ export interface FeedDebugTrace {
 
 const VALID_CATEGORIES: Set<string> = new Set([
   "sky-space", "sky", "space", "nature", "local-scene", "sports", "events",
-  "earth-garden", "history", "culture", "food", "community",
+  "earth-garden", "history", "culture", "food", "community", "happenings",
+  "water", "air", "civic",
 ]);
 
 function normalizeCategory(raw: string): Category | null {
@@ -94,6 +98,8 @@ function normalizeCategory(raw: string): Category | null {
   if (s === "garden" || s === "earth") return "earth-garden";
   if (s === "local" || s === "scene") return "local-scene";
   if (s === "event" || s === "music") return "events";
+  if (s === "happening" || s === "calendar") return "happenings";
+  if (s === "alert" || s === "alerts") return "civic";
   return null;
 }
 
@@ -186,14 +192,17 @@ export async function generateFeedWithTrace(
 
   // 3. All providers in parallel with tracing
   const tideStart = Date.now();
-  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, localNewsResult, communityEventsResult, tideRes] = await Promise.all([
+  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, localNewsResult, communityEventsResult, airResult, waterResult, alertResult, tideRes] = await Promise.all([
     traceProvider("sky", "sky, space", { lat, lng, timezone, hasWeather: !!weatherResult }, () => fetchSkyMoments(loc, weatherResult)),
     traceProvider("sports", "sports", { city, dateISO, espnUrl: `https://site.api.espn.com/apis/site/v2/sports/{league}/scoreboard?dates=${dateISO.replace(/-/g, "")}`, leagues: ["NBA", "NFL", "MLB", "NHL", "MLS"] }, () => fetchSportsMoments(loc)),
     traceProvider("events", "events, culture", { city, lat, lng, dateISO, hasTicketmaster: !!process.env.TICKETMASTER_API_KEY, hasSeatGeek: !!process.env.SEATGEEK_CLIENT_ID }, () => fetchEventMoments(loc)),
     traceProvider("history", "history", { city, dateISO, wikimediaUrl: `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${String(parsed.getUTCMonth() + 1).padStart(2, "0")}/${String(parsed.getUTCDate()).padStart(2, "0")}`, wikiUrl: `https://en.wikipedia.org/w/api.php?action=query&titles=History of ${city.split(",")[0].trim()}` }, () => fetchHistoryMoments(loc)),
     traceProvider("reddit", "community", { city, subreddits: getSubredditsForDebug(city), source: "arctic-shift", strategy: "comment-volume (scores never update upstream)", commentsUrl: `https://arctic-shift.photon-reddit.com/api/comments/search?subreddit={subreddit}&sort=desc&limit=100&after=<48h ago>&before=<cursor>`, paging: "up to 5 pages × 100 comments per subreddit", postsUrl: `https://arctic-shift.photon-reddit.com/api/posts/ids?ids=<top-25-by-recent-comment-count>` }, () => fetchRedditMoments(loc)),
     traceProvider("local-news", "community", { city, feeds: getNewsFeedsForDebug(city) }, () => fetchLocalNewsMoments(loc)),
-    traceProvider("community-events", "community", { city, source: "socrata-soda", endpoint: getCommunityEventEndpointForDebug(city), window: "today through +7d" }, () => fetchCommunityEventMoments(loc)),
+    traceProvider("community-events", "happenings", { city, source: "socrata-soda", endpoint: getCommunityEventEndpointForDebug(city), window: "today through +7d" }, () => fetchCommunityEventMoments(loc)),
+    traceProvider("air-quality", "air", { city, lat, lng, source: "openaq", radiusMeters: 25000 }, async () => (await fetchAirQualityMoments(loc)).moments),
+    traceProvider("water", "water", { city, lat, lng, source: "usgs", bbox: "±0.35 degrees", parameterCd: "00060,00065" }, async () => (await fetchWaterMoments(loc)).moments),
+    traceProvider("alerts", "civic", { city, lat, lng, source: "nws-alerts" }, async () => (await fetchAlertMoments(loc)).moments),
     fetchTides(lat, lng, timezone),
   ]);
 
@@ -230,6 +239,9 @@ export async function generateFeedWithTrace(
     redditResult.trace,
     localNewsResult.trace,
     communityEventsResult.trace,
+    airResult.trace,
+    waterResult.trace,
+    alertResult.trace,
     tideTrace,
   ];
 
@@ -242,6 +254,9 @@ export async function generateFeedWithTrace(
     ...redditResult.moments,
     ...localNewsResult.moments,
     ...communityEventsResult.moments,
+    ...airResult.moments,
+    ...waterResult.moments,
+    ...alertResult.moments,
   ];
 
   // 5. Determine LLM-only categories
@@ -277,6 +292,8 @@ ${llmOnlyInstructions.join("\n")}
 - "space" gets 1 item about visible planets, constellations, and notable celestial objects tonight. Be specific about where to look (compass direction) and when. Do NOT repeat moon phase (shown in glyphs).
 - sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
 - events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
+- happenings gets 1 item: pick the best open-data/community-calendar items. These should feel like "things locals can actually do this week", not generic ticketed entertainment.
+- water, air, and civic each get at most 1 item, only when the supplied source data is genuinely useful or interesting today. Keep them practical and plain-spoken.
 - history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none connect, use your own knowledge ONLY if you are highly confident about the specific date. If you cannot confidently tie a specific event to this exact date, write about a seasonal historical pattern for the region instead (e.g. "This time of year in the 1850s, settlers were..." or "Late March historically marked..."). NEVER fabricate or guess specific dates — getting a date wrong is worse than being general. Include indigenous history when relevant.
 - If community/reddit data was provided, write 1 community item highlighting the most interesting local intel. Focus on actionable tips, timely discoveries, or useful PSAs — not complaints or generic chatter.
 - If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
@@ -369,6 +386,18 @@ Tone: knowledgeable local friend. No HTML tags.`;
     glyphErrors.tide = tideRes.error;
   }
 
+  const airForGlyph = await fetchAirQualityMoments(loc);
+  if (airForGlyph.error) glyphErrors.air = airForGlyph.error;
+  if (airForGlyph.note) glyphNotes.air = airForGlyph.note;
+
+  const waterForGlyph = await fetchWaterMoments(loc);
+  if (waterForGlyph.error) glyphErrors.water = waterForGlyph.error;
+  if (waterForGlyph.note) glyphNotes.water = waterForGlyph.note;
+
+  const alertsForGlyph = await fetchAlertMoments(loc);
+  if (alertsForGlyph.error) glyphErrors.alerts = alertsForGlyph.error;
+  if (alertsForGlyph.note) glyphNotes.alerts = alertsForGlyph.note;
+
   const glyphs: GlyphData = {
     weather: weatherResult ? { temp: weatherResult.temp, code: weatherResult.code } : null,
     sunrise: astro?.sunrise ?? "",
@@ -376,6 +405,9 @@ Tone: knowledgeable local friend. No HTML tags.`;
     moonPhase: astro?.moonPhase ?? "",
     moonIllumination: astro?.moonIllumination ?? 0,
     tide,
+    air: airForGlyph.glyph,
+    water: waterForGlyph.glyph,
+    alerts: alertsForGlyph.glyph,
     errors: glyphErrors,
     notes: glyphNotes,
   };

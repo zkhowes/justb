@@ -35,7 +35,7 @@ function getTimeOfDayGradient(): { gradient: string; isNight: boolean } {
 
 // v2: added glyphs.tide, glyphs.errors, glyphs.notes, and FeedItem.facts.
 // Bump this any time the cached feed shape changes so stale clients self-heal.
-const FEED_CACHE_VERSION = 2;
+const FEED_CACHE_VERSION = 3;
 
 function getCacheKey(cityName: string) {
   const dateStr = new Date().toISOString().slice(0, 10);
@@ -159,7 +159,7 @@ export default function Home() {
 
   // --- Feed fetching ---
 
-  const fetchImages = useCallback(async (feedItems: FeedItem[], cityName: string) => {
+  const fetchImages = useCallback(async (feedItems: FeedItem[], cityName: string, feedGlyphs: GlyphData | null) => {
     const withQueries = feedItems.filter((i) => i.imageQuery);
     if (!withQueries.length) return;
 
@@ -178,7 +178,7 @@ export default function Home() {
           imageMap[item.id] ? { ...item, imageUrl: imageMap[item.id] } : item
         );
         try {
-          localStorage.setItem(getCacheKey(cityName), JSON.stringify(updated));
+          localStorage.setItem(getCacheKey(cityName), JSON.stringify({ items: updated, glyphs: feedGlyphs }));
         } catch {
           // Storage full
         }
@@ -254,7 +254,7 @@ export default function Home() {
       } catch {
         // Storage full
       }
-      fetchImages(data.items, cityName);
+      fetchImages(data.items, cityName, data.glyphs);
     } catch {
       setError("Something went wrong generating your feed. Try refreshing.");
     } finally {
@@ -281,7 +281,7 @@ export default function Home() {
       setGlyphs(feed.glyphs);
       setPhase("feed");
       if (city && feed.items.some((i) => i.imageQuery && !i.imageUrl)) {
-        fetchImages(feed.items, city);
+        fetchImages(feed.items, city, feed.glyphs);
       }
     },
     [city, fetchImages]
@@ -321,6 +321,17 @@ export default function Home() {
   }
 
   // --- Render ---
+
+  const leadItem = items.find((item) => item.imageUrl) ?? items[0];
+  const leadId = leadItem?.id;
+  const pulseItems = items
+    .filter((item) =>
+      item.id !== leadId &&
+      ["happenings", "water", "air", "civic", "community"].includes(item.category)
+    )
+    .slice(0, 3);
+  const pulseIds = new Set(pulseItems.map((item) => item.id));
+  const remainingItems = items.filter((item) => item.id !== leadId && !pulseIds.has(item.id));
 
   const backgroundLayer = (
     <div
@@ -461,13 +472,29 @@ export default function Home() {
       )}
 
       <div className="max-w-lg mx-auto px-4 mt-6 relative">
-        <p
-          className={`text-sm mb-6 ${
-            isNight ? "text-indigo-300" : "text-[var(--text-muted)]"
-          }`}
-        >
-          {today}
-        </p>
+        <section className="mb-6">
+          <p
+            className={`text-xs uppercase tracking-[0.18em] mb-2 ${
+              isNight ? "text-indigo-300" : "text-[var(--text-muted)]"
+            }`}
+          >
+            {today}
+          </p>
+          <h2
+            className={`font-serif text-4xl leading-none ${
+              isNight ? "text-white" : "text-[var(--text-primary)]"
+            }`}
+          >
+            Today in {city?.split(",")[0]}
+          </h2>
+          <p
+            className={`mt-3 text-sm leading-relaxed ${
+              isNight ? "text-indigo-200/75" : "text-[var(--text-secondary)]"
+            }`}
+          >
+            A few grounded signals, a few reasons to look around, and the local texture worth noticing.
+          </p>
+        </section>
 
         {error && (
           <div className="text-center py-12 text-sm text-[var(--text-secondary)]">
@@ -478,12 +505,12 @@ export default function Home() {
         {refreshing ? (
           <FeedSkeleton isNight={isNight} />
         ) : (
-          <div className="space-y-6">
-            {items.map((item, i) => (
-              <div key={item.id} data-card-index={i}>
+          <div className="space-y-7">
+            {leadItem && (
+              <div data-card-index={0}>
                 <FeedCard
-                  item={item}
-                  index={i}
+                  item={leadItem}
+                  index={0}
                   city={city || undefined}
                   isNight={isNight}
                   newRenderer={displayPrefs.newFeed}
@@ -491,7 +518,79 @@ export default function Home() {
                   chips={displayPrefs.chips}
                 />
               </div>
-            ))}
+            )}
+
+            {pulseItems.length > 0 && (
+              <section>
+                <div className="flex items-end justify-between mb-3">
+                  <h3
+                    className={`font-serif text-lg ${
+                      isNight ? "text-white/90" : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    Local pulse
+                  </h3>
+                  <span
+                    className={`text-[11px] uppercase tracking-[0.16em] ${
+                      isNight ? "text-indigo-300/70" : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    live signals
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {pulseItems.map((item, i) => (
+                    <div key={item.id} data-card-index={i + 1}>
+                      <FeedCard
+                        item={item}
+                        index={i + 1}
+                        city={city || undefined}
+                        isNight={isNight}
+                        newRenderer={displayPrefs.newFeed}
+                        variants={displayPrefs.variants}
+                        chips={displayPrefs.chips}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {remainingItems.length > 0 && (
+              <section>
+                <div className="flex items-end justify-between mb-3">
+                  <h3
+                    className={`font-serif text-lg ${
+                      isNight ? "text-white/90" : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    Field notes
+                  </h3>
+                  <span
+                    className={`text-[11px] uppercase tracking-[0.16em] ${
+                      isNight ? "text-indigo-300/70" : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    almanac
+                  </span>
+                </div>
+                <div className="space-y-6">
+                  {remainingItems.map((item, i) => (
+                    <div key={item.id} data-card-index={i + 1 + pulseItems.length}>
+                      <FeedCard
+                        item={item}
+                        index={i + 1 + pulseItems.length}
+                        city={city || undefined}
+                        isNight={isNight}
+                        newRenderer={displayPrefs.newFeed}
+                        variants={displayPrefs.variants}
+                        chips={displayPrefs.chips}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>

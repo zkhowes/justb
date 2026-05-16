@@ -12,6 +12,9 @@ import {
   Moon,
   Waves,
   AlertTriangle,
+  Wind,
+  Activity,
+  Siren,
 } from "lucide-react";
 import { GlyphData } from "@/lib/types";
 
@@ -62,7 +65,7 @@ export function Glyphs({
   return (
     <div className="py-2.5">
       <div
-        className={`flex items-center justify-center gap-5 text-xs ${muted}`}
+        className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs ${muted}`}
       >
         {data.weather && WeatherIcon ? (
           <span className="flex items-center gap-1">
@@ -120,6 +123,51 @@ export function Glyphs({
           >
             <AlertTriangle size={12} />
             tide
+          </span>
+        ) : null}
+
+        {data.air ? (
+          <span className="flex items-center gap-1">
+            <Wind size={14} />
+            <span className={primary}>{data.air.value ?? data.air.label}</span>
+          </span>
+        ) : showDiagnostics && data.errors?.air ? (
+          <span
+            className="flex items-center gap-1 text-amber-500"
+            title={`air: ${data.errors.air}`}
+          >
+            <AlertTriangle size={12} />
+            air
+          </span>
+        ) : null}
+
+        {data.water ? (
+          <span className="flex items-center gap-1">
+            <Activity size={14} />
+            <span className={primary}>{data.water.label}</span>
+          </span>
+        ) : showDiagnostics && data.errors?.water ? (
+          <span
+            className="flex items-center gap-1 text-amber-500"
+            title={`water: ${data.errors.water}`}
+          >
+            <AlertTriangle size={12} />
+            water
+          </span>
+        ) : null}
+
+        {data.alerts && data.alerts.count > 0 ? (
+          <span className="flex items-center gap-1">
+            <Siren size={14} />
+            <span className={primary}>{data.alerts.label}</span>
+          </span>
+        ) : showDiagnostics && data.errors?.alerts ? (
+          <span
+            className="flex items-center gap-1 text-amber-500"
+            title={`alerts: ${data.errors.alerts}`}
+          >
+            <AlertTriangle size={12} />
+            alerts
           </span>
         ) : null}
       </div>

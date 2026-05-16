@@ -23,7 +23,10 @@ The feed is built from **moment providers** — modular data fetchers that each 
 | **Events** | `lib/moments/events.ts` | events, culture | Ticketmaster + SeatGeek | Free (API keys needed) |
 | **History** | `lib/moments/history.ts` | history | Wikimedia On This Day + Wikipedia city articles | Free |
 | **Reddit** | `lib/moments/reddit.ts` | community | Arctic Shift (community Reddit archive) | Free, no key |
-| **Community Events** | `lib/moments/community-events.ts` | community | City open data (Socrata SODA API) | Free, no key |
+| **Community Events** | `lib/moments/community-events.ts` | happenings | City open data, city-profile event calendars (Seattle's Child, Do206) | Free, no key |
+| **Water** | `lib/moments/water.ts` | water | USGS instantaneous values | Free, no key |
+| **Air Quality** | `lib/moments/air-quality.ts` | air | OpenAQ | Free key |
+| **Alerts** | `lib/moments/alerts.ts` | civic | National Weather Service alerts | Free, no key |
 | **LLM-only** | (in prompt) | nature, local-scene, earth-garden, food/community | Claude Haiku training knowledge | ~2-3K tokens |
 
 ### Adding a New Moment Provider
@@ -43,7 +46,7 @@ Each provider can be improved independently:
 - **Nature**: Currently LLM-only — could integrate eBird API for real bird sighting data
 - **Culture**: Ticketmaster covers ticketed events; no free API exists for museum exhibitions
 - **Reddit**: Data comes from Arctic Shift (`arctic-shift.photon-reddit.com`), a community-run Reddit archive. Reddit's own API blocks Vercel datacenter IPs without OAuth, and the commercial Data API request has been stuck in review since 2026-04-01. Arctic Shift has ~15-60min lag and only supports sort by `created_utc`, so the provider fetches the last 48h and re-ranks client-side by engagement/recency. Maps city names to subreddits via `CITY_SUBREDDITS`.
-- **Community Events**: Fetches from Socrata SODA open data portals. Currently supports NYC, Chicago, LA, Seattle. Add new cities by adding entries to `CITY_EVENT_SOURCES` with the Socrata endpoint URL, date field name, and a parser function.
+- **Community Events**: Fetches from Socrata SODA open data portals plus optional per-city enrichment profiles in `lib/city-enrichment.ts`. Seattle currently includes Seattle's Child calendar and Do206 date pages. Add new cities by adding a `CityEnrichmentProfile` with local terms, event calendars, event feeds, and news feeds; add Socrata endpoints to `CITY_EVENT_SOURCES` where available.
 
 ### Sky Provider Details
 
@@ -59,6 +62,7 @@ The sky provider now includes:
 |----------|----------|--------|
 | `ANTHROPIC_API_KEY` | Yes | Anthropic console |
 | `PEXELS_API_KEY` | Yes | Pexels developer |
+| `OPENAQ_API_KEY` | No (enables air quality) | OpenAQ |
 | `TICKETMASTER_API_KEY` | No (degrades gracefully) | developer.ticketmaster.com |
 | `SEATGEEK_CLIENT_ID` | No (degrades gracefully) | seatgeek.com/build |
 | `DATABASE_URL` | No (preview features) | Neon console |
@@ -76,6 +80,15 @@ The sky provider now includes:
 - **Regional events / "Zoomed Out" mode**: Tracked in Linear as [ZKH-33 — JustB Zoomed Out](https://linear.app/zkhowes/issue/ZKH-33/justb-zoomed-out-investigate-radius-expansion-for-small-towns). Investigates radius expansion (1–2hr drive) for small towns where the local feed is too sparse; tensions with the "be here, be now" premise.
 - **Sky charts**: Render a simple SVG/canvas polar sky chart from SunCalc + constellation dataset instead of Pexels starfield photos. Would be a signature feature.
 - **eBird API**: Real bird sighting data for the nature category instead of LLM-only.
+- **EverOut source path**: EverOut is editorially strong, but server fetches currently hit AWS WAF (`403` / challenge). Revisit only if a public feed/API or permitted integration path becomes available.
+- **City enrichment expansion**: Add city profiles beyond Seattle for local event/news calendars once stable source URLs are identified.
+
+### Done (2026-05-16)
+- Local almanac feed expansion — added `happenings`, `water`, `air`, and `civic` categories; wired USGS water gauges, NWS alerts, optional OpenAQ air quality, and glyph support for water/air/alerts.
+- Seattle source framework — added `lib/city-enrichment.ts` for per-city local terms, news feeds, event feeds, and HTML calendar sources. Seattle now discovers happenings from Seattle's Child calendar and Do206 date pages rather than hardcoded individual events.
+- Editorial feed rhythm — added "Today in [City]", lead card, Local pulse, and Field notes sections; bumped browser/server cache versions to invalidate stale feed shapes.
+- Claude-missing fallback — if `ANTHROPIC_API_KEY` is absent, `/api/feed` now returns a source-grounded fallback feed instead of a 500. Fallback skips prompt-only moments and prioritizes local news over Reddit chatter.
+- Local-news guardrails — local news now requires city-profile local terms and rejects obvious national/world stories before prompt/fallback generation.
 
 ### Done (2026-05-14)
 - Reddit engagement-signal rewrite — Arctic Shift snapshots posts at creation and never updates `score`/`num_comments`, so every post forever shows score=1, num_comments=0 and the old filter rejected everything. Provider now queries the comments endpoint (which DOES accumulate), paginates 5×100 comments per subreddit, groups by `link_id`, fetches the top 25 parent posts by ID, and ranks by recent-comment momentum (time since last comment, not time since post creation).

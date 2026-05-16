@@ -10,7 +10,11 @@ export type MomentCategory =
   | "history"
   | "culture"
   | "food"
-  | "community";
+  | "community"
+  | "happenings"
+  | "water"
+  | "air"
+  | "civic";
 
 // Raw structured data from an API or computation — fed to Claude for prose
 export interface MomentContext {

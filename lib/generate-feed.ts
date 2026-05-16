@@ -4,7 +4,8 @@ import { FeedItem, GlyphData, Category } from "./types";
 
 const VALID_CATEGORIES: Set<string> = new Set<string>([
   "sky-space", "sky", "space", "nature", "local-scene", "sports", "events",
-  "earth-garden", "history", "culture", "food", "community",
+  "earth-garden", "history", "culture", "food", "community", "happenings",
+  "water", "air", "civic",
 ]);
 
 /** Normalize common LLM misspellings/variations to valid category strings */
@@ -16,6 +17,8 @@ function normalizeCategory(raw: string): Category | null {
   if (s === "garden" || s === "earth") return "earth-garden";
   if (s === "local" || s === "scene") return "local-scene";
   if (s === "event" || s === "music") return "events";
+  if (s === "happening" || s === "calendar") return "happenings";
+  if (s === "alert" || s === "alerts") return "civic";
   return null;
 }
 
@@ -31,6 +34,7 @@ function shuffle<T>(arr: T[]): T[] {
 // In-memory cache: city+date -> feed items + glyphs
 const feedCache = new Map<string, { items: FeedItem[]; glyphs: GlyphData; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours
+const SERVER_FEED_CACHE_VERSION = 2;
 
 function formatMomentsForPrompt(moments: MomentContext[]): string {
   return moments
@@ -38,12 +42,135 @@ function formatMomentsForPrompt(moments: MomentContext[]): string {
     .join("\n\n");
 }
 
+function cleanLine(line: string): string {
+  return line
+    .replace(/&amp;/g, "&")
+    .replace(/&#179;/g, "3")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\[[^\]]+\]\s*/g, "")
+    .replace(/^[-*\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleFromMoment(moment: MomentContext): string {
+  const labels: Record<Category, string> = {
+    "sky-space": "Sky and space",
+    sky: "The sky has timing today",
+    space: "Look up tonight",
+    nature: "Nature is shifting",
+    "local-scene": "A local detail worth noticing",
+    sports: "Local sports are moving",
+    events: "Ticketed events tonight",
+    "earth-garden": "Earth and garden note",
+    history: "A local history thread",
+    culture: "Culture on the calendar",
+    food: "A seasonal food note",
+    community: "Local chatter with signal",
+    happenings: "Something happening nearby",
+    water: "Water is worth checking",
+    air: "Air conditions are notable",
+    civic: "A local alert to know",
+  };
+  return labels[moment.category as Category] ?? "Local note";
+}
+
+function bodyFromMoment(moment: MomentContext): string {
+  const lines = moment.data
+    .split("\n")
+    .map(cleanLine)
+    .filter(Boolean)
+    .filter((line) =>
+      !line.startsWith("Use this") &&
+      !line.startsWith("Only include") &&
+      !line.startsWith("Pick ") &&
+      !line.startsWith("Highlight ") &&
+      !line.includes("Provide visible planets") &&
+      !line.includes("Do NOT repeat")
+    )
+    .slice(0, 4);
+  const body = lines.join(" ");
+  if (body.length <= 280) return body;
+  return `${body.slice(0, 277).trim()}...`;
+}
+
+function factsFromText(text: string): string[] {
+  const facts = new Set<string>();
+  const time = text.match(/\b\d{1,2}:\d{2}\s?(?:AM|PM|am|pm)\b|\b\d{1,2}\s?(?:AM|PM|am|pm)\b/);
+  if (time) facts.add(time[0].replace(/\s+/g, "").toLowerCase());
+  const weekday = text.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+[A-Z][a-z]{2}\s+\d{1,2}\b/);
+  if (weekday) facts.add(weekday[0]);
+  const free = text.match(/\bfree\b/i);
+  if (free) facts.add("free");
+  const measurement = text.match(/\b\d+(?:\.\d+)?\s?(?:cfs|ft|µg\/m³|F|mi)\b/i);
+  if (measurement) facts.add(measurement[0]);
+  return Array.from(facts).slice(0, 3);
+}
+
+function fallbackImageQuery(category: Category): string {
+  const queries: Record<Category, string> = {
+    "sky-space": "night sky stars",
+    sky: "golden hour clouds",
+    space: "constellation stars",
+    nature: "seasonal flowers closeup",
+    "local-scene": "neighborhood street scene",
+    sports: "stadium lights",
+    events: "concert crowd",
+    "earth-garden": "garden soil plants",
+    history: "old city street",
+    culture: "gallery wall art",
+    food: "seasonal market produce",
+    community: "city sidewalk people",
+    happenings: "street fair market",
+    water: "urban river water",
+    air: "clear city skyline",
+    civic: "city street sign",
+  };
+  return queries[category];
+}
+
+function buildFallbackFeed(moments: MomentContext[]): FeedItem[] {
+  const seen = new Set<string>();
+  const sourcePriority = (moment: MomentContext) => {
+    if (moment.category === "community" && moment.source === "local-news") return -2;
+    if (moment.category === "community" && moment.source === "reddit") return 4;
+    if (moment.category === "space" && moment.data.includes("Provide visible planets")) return 10;
+    return 0;
+  };
+
+  return [...moments]
+    .sort((a, b) => sourcePriority(a) - sourcePriority(b))
+    .filter((moment) => {
+      if (moment.category === "space" && moment.data.includes("Provide visible planets")) return false;
+      if (seen.has(moment.category)) return false;
+      seen.add(moment.category);
+      return true;
+    })
+    .map((moment, index): FeedItem | null => {
+      const category = moment.category as Category;
+      const body = bodyFromMoment(moment);
+      if (!body) return null;
+      const facts = factsFromText(moment.data);
+      return {
+        id: `${category}-${index}`,
+        title: titleFromMoment(moment),
+        body,
+        category,
+        confidence: "medium",
+        imageQuery: fallbackImageQuery(category),
+        ...(facts.length > 0 ? { facts } : {}),
+      };
+    })
+    .filter((item): item is FeedItem => item !== null)
+    .slice(0, 10);
+}
+
 export async function generateFeed(
   city: string,
   date: string,
   recentTopics?: string[]
 ): Promise<{ items: FeedItem[]; glyphs: GlyphData }> {
-  const cacheKey = `${city.toLowerCase().trim()}:${date}`;
+  const cacheKey = `v${SERVER_FEED_CACHE_VERSION}:${city.toLowerCase().trim()}:${date}`;
   const cached = feedCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return { items: shuffle([...cached.items]), glyphs: cached.glyphs };
@@ -60,6 +187,13 @@ export async function generateFeed(
   if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through a variety of neighborhoods, parks, and local institutions — only feature the city's most famous landmark if something specific and timely is happening there. Skip if nothing specific to this week/season/place.");
   if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days. Skip if nothing specific to this week/season/place.");
   if (!coveredCategories.has("food")) llmOnlyCategories.push("food/community(1): seasonal ingredient, local dish, or community tradition. Skip if nothing specific to this week/season/place.");
+
+  // 3. Send to Claude — NO web search, just prose generation
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const items = buildFallbackFeed(moments);
+    feedCache.set(cacheKey, { items, glyphs, timestamp: Date.now() });
+    return { items: shuffle(items), glyphs };
+  }
 
   // 3. Send to Claude — NO web search, just prose generation
   const message = await anthropic.messages.create({
@@ -82,8 +216,10 @@ ${llmOnlyCategories.join("\n")}
 - "space" gets 1 item about visible planets, constellations, and notable celestial objects tonight. Be specific about where to look (compass direction) and when. Do NOT repeat moon phase (shown in glyphs).
 - sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
 - events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
+- happenings gets 1 item: pick the best open-data/community-calendar items. These should feel like "things locals can actually do this week", not generic ticketed entertainment.
+- water, air, and civic each get at most 1 item, only when the supplied source data is genuinely useful or interesting today. Keep them practical and plain-spoken.
 - history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none of the provided facts connect, use your own knowledge — but ONLY if you are highly confident about the specific date. If you cannot confidently tie a specific event to this exact date, write about a seasonal historical pattern for the region instead (e.g. "This time of year in the 1850s, settlers were..." or "Late March historically marked..."). NEVER fabricate or guess specific dates — getting a date wrong is worse than being general. Include indigenous history when relevant.
-- If community data was provided (from reddit, local news, and/or city open data), write 1-2 community items highlighting the most interesting local intel. Prioritize: farmers markets, street fairs, festivals, free workshops, block parties, pop-ups, and things happening THIS WEEK. Focus on actionable "go do this" suggestions and timely discoveries — not complaints or generic chatter.
+- If community data was provided (from reddit and/or local news), write 1 community item highlighting the most interesting local intel. Focus on actionable tips, timely discoveries, or useful PSAs — not complaints or generic chatter.
 - If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
 - Aim for 10 items, but only include what's genuinely relevant — fewer is fine. Do not pad with generic filler.
 ${recentTopics && recentTopics.length > 0 ? `\n## Recently covered topics (vary your coverage, avoid repeating these):\n${recentTopics.join(", ")}` : ""}

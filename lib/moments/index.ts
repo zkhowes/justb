@@ -10,6 +10,9 @@ import { fetchLocalNewsMoments } from "./local-news";
 import { fetchCommunityEventMoments } from "./community-events";
 import { fetchWeather } from "./weather";
 import { fetchTides } from "./tides";
+import { fetchAirQualityMoments } from "./air-quality";
+import { fetchWaterMoments } from "./water";
+import { fetchAlertMoments } from "./alerts";
 import { GlyphData } from "../types";
 
 export type { MomentContext, LocationContext };
@@ -31,7 +34,7 @@ export async function gatherAllMoments(
   // Fetch weather first (sky provider needs it), other providers in parallel
   const weatherResult = await fetchWeather(lat, lng);
 
-  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, newsResult, communityEventsResult, tideResult] =
+  const [skyResult, sportsResult, eventsResult, historyResult, redditResult, newsResult, communityEventsResult, airResult, waterResult, alertResult, tideResult] =
     await Promise.allSettled([
       fetchSkyMoments(loc, weatherResult),
       fetchSportsMoments(loc),
@@ -40,6 +43,9 @@ export async function gatherAllMoments(
       fetchRedditMoments(loc),
       fetchLocalNewsMoments(loc),
       fetchCommunityEventMoments(loc),
+      fetchAirQualityMoments(loc),
+      fetchWaterMoments(loc),
+      fetchAlertMoments(loc),
       fetchTides(lat, lng, timezone),
     ]);
 
@@ -55,10 +61,16 @@ export async function gatherAllMoments(
   const redditMoments = redditResult.status === "fulfilled" ? redditResult.value : [];
   const newsMoments = newsResult.status === "fulfilled" ? newsResult.value : [];
   const communityEventMoments = communityEventsResult.status === "fulfilled" ? communityEventsResult.value : [];
+  const air = airResult.status === "fulfilled" ? airResult.value : null;
+  const water = waterResult.status === "fulfilled" ? waterResult.value : null;
+  const alerts = alertResult.status === "fulfilled" ? alertResult.value : null;
 
   if (redditMoments.length > 0) moments.push(...redditMoments);
   if (newsMoments.length > 0) moments.push(...newsMoments);
   if (communityEventMoments.length > 0) moments.push(...communityEventMoments);
+  if (air?.moments.length) moments.push(...air.moments);
+  if (water?.moments.length) moments.push(...water.moments);
+  if (alerts?.moments.length) moments.push(...alerts.moments);
 
   const errors: GlyphData["errors"] = {};
   const notes: GlyphData["notes"] = {};
@@ -71,6 +83,30 @@ export async function gatherAllMoments(
   }
 
   if (!weatherResult) errors.weather = "open-meteo returned no data";
+
+  if (airResult.status === "rejected") {
+    errors.air = airResult.reason instanceof Error ? airResult.reason.message : String(airResult.reason);
+  } else if (air?.error) {
+    errors.air = air.error;
+  } else if (air?.note) {
+    notes.air = air.note;
+  }
+
+  if (waterResult.status === "rejected") {
+    errors.water = waterResult.reason instanceof Error ? waterResult.reason.message : String(waterResult.reason);
+  } else if (water?.error) {
+    errors.water = water.error;
+  } else if (water?.note) {
+    notes.water = water.note;
+  }
+
+  if (alertResult.status === "rejected") {
+    errors.alerts = alertResult.reason instanceof Error ? alertResult.reason.message : String(alertResult.reason);
+  } else if (alerts?.error) {
+    errors.alerts = alerts.error;
+  } else if (alerts?.note) {
+    notes.alerts = alerts.note;
+  }
 
   let tide: GlyphData["tide"] = null;
   if (tideResult.status === "fulfilled") {
@@ -95,6 +131,9 @@ export async function gatherAllMoments(
     moonPhase: astro?.moonPhase ?? "",
     moonIllumination: astro?.moonIllumination ?? 0,
     tide,
+    air: air?.glyph ?? null,
+    water: water?.glyph ?? null,
+    alerts: alerts?.glyph ?? null,
     errors,
     notes,
   };
