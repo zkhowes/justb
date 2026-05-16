@@ -1,9 +1,47 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MapPin, ArrowRight, Loader2 } from "lucide-react";
 
-type Suggestion = { display: string; city: string };
+type Suggestion = { display: string; city: string; region: string };
+
+function PinIcon() {
+  return (
+    <svg
+      width="14"
+      height="18"
+      viewBox="0 0 14 18"
+      fill="none"
+      stroke="var(--accent)"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M7 17s6-5.5 6-10A6 6 0 1 0 1 7c0 4.5 6 10 6 10Z" />
+      <circle cx="7" cy="7" r="2" fill="var(--accent)" stroke="var(--accent)" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg
+      width="16"
+      height="12"
+      viewBox="0 0 16 12"
+      fill="none"
+      stroke="var(--text-primary)"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ opacity: 0.6 }}
+      aria-hidden
+    >
+      <path d="M1 6h13.5" />
+      <path d="M10 1.5 14.5 6 10 10.5" />
+    </svg>
+  );
+}
 
 export function LocationInput({
   onSelect,
@@ -13,7 +51,6 @@ export function LocationInput({
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -27,7 +64,6 @@ export function LocationInput({
       return;
     }
 
-    setLoading(true);
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1&countrycodes=us`,
@@ -46,15 +82,14 @@ export function LocationInput({
         if (!city || seen.has(city + state)) continue;
         seen.add(city + state);
         results.push({
-          display: state ? `${city}, ${state}` : city,
+          display: city,
+          region: state,
           city: state ? `${city}, ${state}` : city,
         });
       }
       setSuggestions(results);
     } catch {
       // fail silently — user can still submit freeform
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -70,66 +105,110 @@ export function LocationInput({
     onSelect(city);
   }
 
+  function handleArrow() {
+    if (suggestions.length > 0) handleSubmit(suggestions[0].city);
+    else if (query.trim()) handleSubmit(query.trim());
+  }
+
   return (
-    <div className="relative w-full max-w-sm">
-      <div className="relative">
-        <MapPin
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-          size={18}
-        />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              if (suggestions.length > 0) {
-                handleSubmit(suggestions[0].city);
-              } else if (query.trim()) {
-                handleSubmit(query.trim());
-              }
-            }
-          }}
-          onFocus={() => setShowSuggestions(true)}
-          placeholder="Enter your city..."
-          className="w-full pl-10 pr-10 py-3 rounded-xl border border-[var(--border)] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-muted)] focus:ring-opacity-30 transition-shadow"
-        />
-        {loading ? (
-          <Loader2
-            size={16}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] animate-spin"
+    <div className="w-full max-w-[340px] mx-auto">
+      <p
+        className="text-center font-sans uppercase mb-[10px]"
+        style={{
+          fontSize: 10,
+          letterSpacing: "0.22em",
+          color: "var(--text-muted)",
+        }}
+      >
+        where are you, today
+      </p>
+
+      <div
+        className="flex items-center gap-3 pb-3"
+        style={{ borderBottom: "1px solid var(--rule-strong)" }}
+      >
+        <PinIcon />
+        <div className="relative flex-1 flex items-center">
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleArrow();
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            placeholder=""
+            className="w-full bg-transparent font-serif outline-none border-none"
+            style={{
+              fontSize: 20,
+              color: "var(--text-primary)",
+              caretColor: "var(--accent)",
+            }}
           />
-        ) : (
-          query.trim() && (
-            <button
-              onClick={() => {
-                if (suggestions.length > 0) {
-                  handleSubmit(suggestions[0].city);
-                } else {
-                  handleSubmit(query.trim());
-                }
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              <ArrowRight size={16} />
-            </button>
-          )
-        )}
-      </div>
-      {showSuggestions && suggestions.length > 0 && (
-        <ul
-          className="absolute top-full mt-2 w-full bg-white rounded-xl border border-[var(--border)] overflow-hidden z-10"
-          style={{ boxShadow: "var(--shadow-hover)" }}
+          {query.length === 0 && (
+            <span
+              className="caret pointer-events-none absolute left-0"
+              aria-hidden
+            />
+          )}
+        </div>
+        <button
+          onClick={handleArrow}
+          className="p-1"
+          aria-label="Submit"
+          disabled={!query.trim() && suggestions.length === 0}
         >
-          {suggestions.map((s) => (
-            <li key={s.city}>
+          <ArrowRightIcon />
+        </button>
+      </div>
+
+      {showSuggestions && suggestions.length > 0 && (
+        <ul className="mt-1 list-none p-0">
+          {suggestions.map((s, i) => (
+            <li
+              key={s.city}
+              className="grid items-baseline"
+              style={{
+                gridTemplateColumns: "28px 1fr auto",
+                gap: 12,
+                padding: "10px 0",
+                borderBottom:
+                  i === suggestions.length - 1
+                    ? "none"
+                    : "1px solid var(--rule-strong)",
+              }}
+            >
+              <span
+                className="font-sans uppercase"
+                style={{
+                  fontSize: 9,
+                  letterSpacing: "0.18em",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {String(i + 1).padStart(2, "0")}
+              </span>
               <button
                 onClick={() => handleSubmit(s.city)}
-                className="w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--bg)] transition-colors"
+                className="text-left font-serif"
+                style={{
+                  fontSize: 17,
+                  color: "var(--text-primary)",
+                  lineHeight: 1.2,
+                }}
               >
                 {s.display}
               </button>
+              <span
+                className="font-sans"
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {s.region}
+              </span>
             </li>
           ))}
         </ul>

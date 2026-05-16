@@ -12,24 +12,42 @@ const PHASE_DURATION: Record<BreathPhase, number> = {
 };
 
 const PHASE_LABEL: Record<BreathPhase, string> = {
-  inhale: "Breathe in...",
-  hold: "Hold...",
-  exhale: "Breathe out...",
+  inhale: "Breathe in",
+  hold: "Hold",
+  exhale: "Breathe out",
+};
+
+const PHASE_HINT: Record<BreathPhase, string> = {
+  inhale: "fill from the belly up",
+  hold: "just for a beat",
+  exhale: "let the shoulders drop. let the day arrive.",
 };
 
 const TOTAL_BREATHS = 2;
 const PRESS_DURATION = 2000;
-const CIRCLE_RADIUS = 156;
-const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
+
+// Disc geometry for Arrive (280px) + Breathe (220px)
+const ARRIVE_DISC = 280;
+const ARRIVE_RING_R = 139; // (280 - strokeWidth) / 2 roughly
+const ARRIVE_CIRC = 2 * Math.PI * ARRIVE_RING_R;
+
+const BREATHE_DISC = 220;
 
 export function BreathingExercise({
   onStart,
   onComplete,
-  isNight,
+  city,
+  dateLabel,
+  almanac,
+  isNight = false,
 }: {
   onStart: () => void;
   onComplete: () => void;
-  isNight: boolean;
+  /** Optional masthead context — falls back to a clean disc-only layout if absent */
+  city?: string;
+  dateLabel?: string;
+  almanac?: string[];
+  isNight?: boolean;
 }) {
   const [started, setStarted] = useState(false);
   const [breathIndex, setBreathIndex] = useState(0);
@@ -87,7 +105,6 @@ export function BreathingExercise({
       } else if (phase === "hold") {
         setPhase("exhale");
       } else {
-        // exhale done
         if (breathIndex < TOTAL_BREATHS - 1) {
           setBreathIndex((i) => i + 1);
           setPhase("inhale");
@@ -115,96 +132,367 @@ export function BreathingExercise({
         : 0.6;
 
   const circleTransition = !started
-    ? { duration: 2, repeat: Infinity, repeatType: "reverse" as const, ease: "easeInOut" as const }
+    ? {
+        duration: 2,
+        repeat: Infinity,
+        repeatType: "reverse" as const,
+        ease: "easeInOut" as const,
+      }
     : { duration: PHASE_DURATION[phase] / 1000, ease: "easeInOut" as const };
-
-  const textColor = isNight ? "text-indigo-200" : "text-[var(--text-secondary)]";
-  const mutedColor = isNight ? "text-indigo-400" : "text-[var(--text-muted)]";
-  const ringColor = isNight
-    ? "border-indigo-400/40"
-    : "border-stone-300/60";
-  const glowColor = isNight
-    ? "shadow-indigo-500/20"
-    : "shadow-stone-400/20";
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col items-center justify-center px-6"
-      animate={done ? { opacity: 0, scale: 0.95 } : { opacity: 1, scale: 1 }}
+      className="min-h-screen flex flex-col relative"
+      animate={done ? { opacity: 0, scale: 0.97 } : { opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
     >
-      {!started ? (
-        <motion.button
-          onPointerDown={handlePressStart}
-          onPointerUp={handlePressEnd}
-          onPointerLeave={handlePressEnd}
-          className={`relative w-80 h-80 rounded-full border-2 ${ringColor} flex items-center justify-center shadow-lg ${glowColor} transition-colors select-none touch-none overflow-hidden`}
-          animate={pressing ? { scale: 0.97 } : { scale: [1, 1.03, 1] }}
-          transition={pressing ? { duration: 0.15 } : { duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          aria-label="Press and hold for 2 seconds to begin"
-        >
-          {/* Fill gauge — rises from bottom */}
-          {progress > 0 && (
-            <div
-              className="absolute inset-0 pointer-events-none rounded-full"
-              style={{
-                background: isNight
-                  ? "rgba(129, 140, 248, 0.15)"
-                  : "rgba(168, 162, 158, 0.15)",
-                clipPath: `inset(${(1 - progress) * 100}% 0 0 0)`,
-              }}
-            />
-          )}
-          {/* Progress ring around perimeter */}
-          <svg
-            className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
-            viewBox="0 0 320 320"
-          >
-            <circle
-              cx="160"
-              cy="160"
-              r={CIRCLE_RADIUS}
-              fill="none"
-              stroke={isNight ? "#818cf8" : "#a8a29e"}
-              strokeWidth="3"
-              strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
-              strokeLinecap="round"
-              opacity={progress > 0 ? 1 : 0}
-            />
-          </svg>
-          <span className={`relative font-serif text-xl font-semibold ${textColor}`}>
-            {pressing ? "Hold..." : "Click and hold"}
-          </span>
-        </motion.button>
-      ) : (
-        <div className="flex flex-col items-center gap-8">
-          <motion.div
-            className={`w-80 h-80 rounded-full border-2 ${ringColor} shadow-lg ${glowColor}`}
-            animate={{ scale: circleScale }}
-            transition={circleTransition}
-            initial={{ scale: 0.6 }}
-          />
+      {/* Sky wash — taller on Breathe screen */}
+      <div
+        className="absolute inset-x-0 top-0 pointer-events-none"
+        style={{
+          height: started ? 340 : 260,
+          background: "var(--sky-wash)",
+        }}
+      />
 
-          <div className="h-12 flex flex-col items-center justify-center">
-            <AnimatePresence mode="wait">
-              <motion.p
-                key={phase}
-                className={`font-serif text-xl ${textColor}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.3 }}
-              >
-                {PHASE_LABEL[phase]}
-              </motion.p>
-            </AnimatePresence>
-            <p className={`text-xs mt-2 ${mutedColor}`}>
-              {breathIndex + 1} of {TOTAL_BREATHS}
-            </p>
-          </div>
-        </div>
+      {/* Night moon (Arrive only) */}
+      {!started && isNight && (
+        <div
+          aria-hidden
+          className="absolute"
+          style={{
+            top: 80,
+            right: 60,
+            width: 38,
+            height: 38,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle at 35% 35%, #f1e8c8 0%, #d2c290 60%, #8d7b48 100%)",
+            boxShadow: "0 0 30px rgba(241,232,200,0.15)",
+          }}
+        />
+      )}
+
+      {!started ? (
+        <ArriveScreen
+          city={city}
+          dateLabel={dateLabel}
+          almanac={almanac}
+          progress={progress}
+          pressing={pressing}
+          isNight={isNight}
+          onPressStart={handlePressStart}
+          onPressEnd={handlePressEnd}
+        />
+      ) : (
+        <BreatheScreen
+          phase={phase}
+          breathIndex={breathIndex}
+          circleScale={circleScale}
+          circleTransition={circleTransition}
+          isNight={isNight}
+        />
       )}
     </motion.div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Arrive — press-and-hold
+
+function ArriveScreen({
+  city,
+  dateLabel,
+  almanac,
+  progress,
+  pressing,
+  isNight,
+  onPressStart,
+  onPressEnd,
+}: {
+  city?: string;
+  dateLabel?: string;
+  almanac?: string[];
+  progress: number;
+  pressing: boolean;
+  isNight: boolean;
+  onPressStart: () => void;
+  onPressEnd: () => void;
+}) {
+  return (
+    <>
+      {/* Masthead */}
+      <div className="relative" style={{ padding: "72px 28px 0" }}>
+        {(city || dateLabel) && (
+          <p
+            className="text-center font-sans uppercase"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.28em",
+              color: "var(--text-muted)",
+            }}
+          >
+            {[city, dateLabel].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        <h1
+          className="text-center font-display"
+          style={{
+            fontSize: 30,
+            lineHeight: 1.05,
+            letterSpacing: "-0.015em",
+            marginTop: 14,
+            color: "var(--text-primary)",
+          }}
+        >
+          Two slow breaths,
+          <br />
+          <em
+            className="font-serif italic font-light"
+            style={{ color: "var(--accent)" }}
+          >
+            then today.
+          </em>
+        </h1>
+      </div>
+
+      {/* Disc */}
+      <div className="flex-1 flex items-center justify-center relative">
+        <button
+          onPointerDown={onPressStart}
+          onPointerUp={onPressEnd}
+          onPointerLeave={onPressEnd}
+          className="relative select-none touch-none"
+          style={{
+            width: ARRIVE_DISC,
+            height: ARRIVE_DISC,
+            borderRadius: "50%",
+            border: "1px solid var(--rule-strong)",
+            background: "transparent",
+            boxShadow: isNight
+              ? "inset 0 0 60px rgba(232,226,211,0.02), 0 8px 30px rgba(0,0,0,0.25)"
+              : "inset 0 0 60px rgba(28,26,22,0.03), 0 8px 30px rgba(28,26,22,0.06)",
+          }}
+          aria-label="Press and hold for 2 seconds to begin"
+        >
+          {/* Progress ring */}
+          <svg
+            className="absolute inset-0 -rotate-90 pointer-events-none"
+            width={ARRIVE_DISC}
+            height={ARRIVE_DISC}
+            viewBox={`0 0 ${ARRIVE_DISC} ${ARRIVE_DISC}`}
+          >
+            <circle
+              cx={ARRIVE_DISC / 2}
+              cy={ARRIVE_DISC / 2}
+              r={ARRIVE_RING_R}
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth={1.5}
+              strokeDasharray={ARRIVE_CIRC}
+              strokeDashoffset={ARRIVE_CIRC * (1 - progress)}
+              strokeLinecap="round"
+              opacity={0.85}
+            />
+          </svg>
+
+          {/* Center label stack */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+            <span
+              className="font-sans uppercase"
+              style={{
+                fontSize: 9.5,
+                letterSpacing: "0.28em",
+                color: "var(--accent)",
+              }}
+            >
+              {pressing ? "Holding" : "Press & hold"}
+            </span>
+            <span
+              className="font-display"
+              style={{
+                fontSize: 26,
+                lineHeight: 1,
+                marginTop: 10,
+                textAlign: "center",
+                color: "var(--text-primary)",
+              }}
+            >
+              Hold to
+              <br />
+              begin
+            </span>
+            <span
+              className="font-serif italic"
+              style={{
+                fontSize: 12,
+                marginTop: 14,
+                color: "var(--text-secondary)",
+              }}
+            >
+              two seconds
+            </span>
+          </div>
+        </button>
+      </div>
+
+      {/* Almanac footer */}
+      {almanac && almanac.length > 0 && (
+        <div
+          className="font-sans"
+          style={{
+            padding: "0 28px 32px",
+            fontSize: 11,
+            color: "var(--text-secondary)",
+            textAlign: "center",
+          }}
+        >
+          {almanac.map((item, i) => (
+            <span key={i}>
+              {item}
+              {i < almanac.length - 1 && (
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-block",
+                    width: 2,
+                    height: 2,
+                    borderRadius: "50%",
+                    background: "var(--text-muted)",
+                    margin: "0 8px",
+                    verticalAlign: "middle",
+                  }}
+                />
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Breathe — active phases
+
+function BreatheScreen({
+  phase,
+  breathIndex,
+  circleScale,
+  circleTransition,
+  isNight,
+}: {
+  phase: BreathPhase;
+  breathIndex: number;
+  circleScale: number;
+  circleTransition:
+    | { duration: number; ease: "easeInOut" }
+    | {
+        duration: number;
+        repeat: typeof Infinity;
+        repeatType: "reverse";
+        ease: "easeInOut";
+      };
+  isNight: boolean;
+}) {
+  return (
+    <>
+      <div className="flex-1 flex items-center justify-center relative">
+        <motion.div
+          style={{
+            width: BREATHE_DISC,
+            height: BREATHE_DISC,
+            borderRadius: "50%",
+            border: "1px solid var(--rule)",
+            background: isNight
+              ? "rgba(232,226,211,0.02)"
+              : "rgba(255,255,255,0.4)",
+            boxShadow:
+              "0 8px 40px rgba(28,26,22,0.05), inset 0 0 60px rgba(28,26,22,0.02)",
+          }}
+          animate={{ scale: circleScale }}
+          transition={circleTransition}
+          initial={{ scale: 0.6 }}
+        />
+      </div>
+
+      <div
+        className="flex flex-col items-center"
+        style={{ padding: "0 28px 80px" }}
+      >
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={phase}
+            className="font-display text-center"
+            style={{
+              fontSize: 30,
+              lineHeight: 1.05,
+              color: "var(--text-primary)",
+            }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+          >
+            {PHASE_LABEL[phase]}
+            <span style={{ color: "var(--accent)" }}>…</span>
+          </motion.p>
+        </AnimatePresence>
+
+        <div className="flex items-center gap-2" style={{ marginTop: 16 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 18,
+              height: 1,
+              background: "var(--text-muted)",
+              display: "inline-block",
+            }}
+          />
+          <span
+            className="font-sans uppercase"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.24em",
+              color: "var(--text-secondary)",
+            }}
+          >
+            Breath {breathIndex + 1}{" "}
+            <span style={{ color: "var(--text-muted)" }}>of</span>{" "}
+            {TOTAL_BREATHS}
+          </span>
+          <span
+            aria-hidden
+            style={{
+              width: 18,
+              height: 1,
+              background: "var(--text-muted)",
+              display: "inline-block",
+            }}
+          />
+        </div>
+
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={`hint-${phase}`}
+            className="font-serif italic text-center"
+            style={{
+              fontSize: 14,
+              fontWeight: 300,
+              maxWidth: 240,
+              marginTop: 14,
+              color: "var(--text-secondary)",
+              lineHeight: 1.4,
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            {PHASE_HINT[phase]}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+    </>
   );
 }

@@ -1,17 +1,29 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Inter, Lora } from "next/font/google";
+import { DM_Serif_Display, Source_Serif_4, Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const dmSerif = DM_Serif_Display({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["400"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
 });
 
-const lora = Lora({
+const sourceSerif = Source_Serif_4({
   subsets: ["latin"],
-  variable: "--font-lora",
+  weight: ["300", "400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+});
+
+// Inter as the sans for editorial labels — Geist isn't available in next/font
+// on Next 14. Visually neutral enough to read as the "sans" voice.
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +38,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${lora.variable} font-sans`}>
+      <body
+        className={`${dmSerif.variable} ${sourceSerif.variable} ${inter.variable} font-serif`}
+      >
         {children}
         <Analytics />
         <SpeedInsights />

@@ -1,25 +1,31 @@
-export function FeedSkeleton({ isNight }: { isNight?: boolean }) {
+export function FeedSkeleton() {
   return (
-    <div className="space-y-6">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className={`rounded-xl overflow-hidden backdrop-blur-xl border ${
-            isNight
-              ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
-              : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
-          }`}
-        >
-          <div className="skeleton h-24 w-full" />
-          <div className="p-5 space-y-3">
-            <div className="skeleton h-4 w-20" />
-            <div className="skeleton h-5 w-3/4" />
+    <div className="space-y-7">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <article key={i}>
+          {/* Hero-style image block for the first card */}
+          {i === 0 && (
+            <div
+              className="skeleton"
+              style={{ height: 320, width: "100%", borderRadius: 2 }}
+            />
+          )}
+          <div className="space-y-3" style={{ paddingTop: i === 0 ? 16 : 0 }}>
+            <div
+              className="skeleton"
+              style={{ height: 8, width: 80, borderRadius: 1 }}
+            />
+            <div
+              className="skeleton"
+              style={{ height: i === 0 ? 28 : 22, width: "85%", borderRadius: 2 }}
+            />
             <div className="space-y-2">
-              <div className="skeleton h-3 w-full" />
-              <div className="skeleton h-3 w-5/6" />
+              <div className="skeleton" style={{ height: 10, width: "100%" }} />
+              <div className="skeleton" style={{ height: 10, width: "92%" }} />
+              <div className="skeleton" style={{ height: 10, width: "70%" }} />
             </div>
           </div>
-        </div>
+        </article>
       ))}
     </div>
   );

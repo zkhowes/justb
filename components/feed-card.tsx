@@ -3,32 +3,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { AlertCircle, Check, X, AlertTriangle } from "lucide-react";
-import { FeedItem, Category } from "@/lib/types";
-import { CategoryPill, categoryConfig } from "./category-pill";
+import { FeedItem } from "@/lib/types";
+import { CatMark, categoryConfig } from "./category-pill";
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
-const gradients: Record<Category, string> = {
-  "sky-space": "from-indigo-900 to-indigo-700",
-  sky: "from-amber-700 to-amber-500",
-  space: "from-indigo-900 to-indigo-700",
-  nature: "from-emerald-700 to-emerald-500",
-  "local-scene": "from-amber-700 to-amber-500",
-  sports: "from-red-700 to-red-500",
-  events: "from-violet-700 to-violet-500",
-  "earth-garden": "from-lime-700 to-lime-500",
-  history: "from-yellow-800 to-yellow-600",
-  culture: "from-purple-700 to-purple-500",
-  food: "from-orange-700 to-orange-500",
-  community: "from-teal-700 to-teal-500",
-  happenings: "from-rose-700 to-pink-500",
-  water: "from-sky-800 to-cyan-600",
-  air: "from-indigo-700 to-sky-500",
-  civic: "from-red-900 to-red-600",
-};
-
 type Rating = "good" | "irrelevant" | "inaccurate";
-type Variant = "hero" | "quote" | "stat" | "minimal" | "standard";
+type Variant = "hero" | "quote" | "stat" | "pulse" | "field" | "standard";
 
 const INACCURACY_REASONS = [
   "Wrong time/date",
@@ -37,33 +18,64 @@ const INACCURACY_REASONS = [
   "Other",
 ] as const;
 
-function pickVariant(item: FeedItem, index: number): Variant {
+function pickVariant(item: FeedItem, index: number, layoutHint?: Variant): Variant {
+  if (layoutHint) return layoutHint;
   if (index === 0 && item.imageUrl) return "hero";
   if (item.category === "history" || item.category === "culture") return "quote";
-  if (item.category === "sky" || item.category === "space" || item.category === "sports" || item.category === "water" || item.category === "air" || item.category === "civic") return "stat";
-  if (item.category === "community" || item.category === "food" || item.category === "happenings") return "minimal";
-  return "standard";
+  if (
+    item.category === "sky" ||
+    item.category === "space" ||
+    item.category === "sports"
+  )
+    return "stat";
+  if (
+    item.category === "happenings" ||
+    item.category === "water" ||
+    item.category === "air" ||
+    item.category === "civic" ||
+    item.category === "community"
+  )
+    return "pulse";
+  return item.imageUrl ? "standard" : "field";
 }
 
-function Chips({ facts, isNight }: { facts: string[]; isNight: boolean }) {
+// ──────────────────────────────────────────────────────────────────────
+// Fact strip — replaces the old colored chip row.
+// Renders as inline meta: "7:56–8:40 PM | 45 min window | longest-day"
+// Numbers in primary, labels in secondary, pipes in rule color.
+
+function FactStrip({ facts }: { facts: string[] }) {
   if (!facts || facts.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 mb-2">
+    <div
+      className="font-sans"
+      style={{
+        fontSize: 10.5,
+        letterSpacing: "0.06em",
+        color: "var(--text-secondary)",
+        marginTop: 6,
+      }}
+    >
       {facts.map((f, i) => (
-        <span
-          key={i}
-          className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-            isNight
-              ? "border-white/20 bg-white/10 text-white/85"
-              : "border-black/10 bg-black/5 text-[var(--text-secondary)]"
-          }`}
-        >
-          {f}
+        <span key={i}>
+          {i > 0 && (
+            <span
+              aria-hidden
+              style={{ color: "var(--rule-strong)", margin: "0 8px" }}
+            >
+              |
+            </span>
+          )}
+          <span style={{ color: "var(--text-primary)" }}>{f}</span>
         </span>
       ))}
     </div>
   );
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Feedback row (preview-only). Magazine treatment: tiny icon buttons with
+// accent-colored underline on the active selection — no colored hover bg.
 
 function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
   const [selected, setSelected] = useState<Rating | null>(null);
@@ -107,40 +119,58 @@ function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
     sendFeedback("inaccurate", reason);
   }
 
-  const buttons: { rating: Rating; icon: typeof Check; color: string; activeColor: string }[] = [
-    { rating: "good", icon: Check, color: "text-[var(--text-muted)]", activeColor: "text-emerald-500" },
-    { rating: "irrelevant", icon: X, color: "text-[var(--text-muted)]", activeColor: "text-amber-500" },
-    { rating: "inaccurate", icon: AlertTriangle, color: "text-[var(--text-muted)]", activeColor: "text-red-500" },
+  const buttons: { rating: Rating; icon: typeof Check }[] = [
+    { rating: "good", icon: Check },
+    { rating: "irrelevant", icon: X },
+    { rating: "inaccurate", icon: AlertTriangle },
   ];
 
   return (
-    <div className="pt-3 mt-3 border-t border-[var(--border)]/50">
-      <div className="flex items-center gap-1">
-        {buttons.map(({ rating, icon: Icon, color, activeColor }) => (
-          <button
-            key={rating}
-            onClick={() => handleRate(rating)}
-            className={`p-1.5 rounded-lg transition-all ${
-              selected === rating
-                ? activeColor
-                : selected
-                  ? "opacity-30 " + color
-                  : color + " hover:bg-[var(--border)]/30"
-            }`}
-            title={rating}
-            disabled={!!selected}
-          >
-            <Icon size={14} />
-          </button>
-        ))}
+    <div
+      style={{
+        paddingTop: 10,
+        marginTop: 14,
+        borderTop: "1px solid var(--rule)",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        {buttons.map(({ rating, icon: Icon }) => {
+          const isActive = selected === rating;
+          const isDim = !!selected && !isActive;
+          return (
+            <button
+              key={rating}
+              onClick={() => handleRate(rating)}
+              className="p-1"
+              style={{
+                color: isActive ? "var(--accent)" : "var(--text-muted)",
+                borderBottom: isActive
+                  ? "1px solid var(--accent)"
+                  : "1px solid transparent",
+                opacity: isDim ? 0.3 : 1,
+              }}
+              title={rating}
+              disabled={!!selected}
+            >
+              <Icon size={13} />
+            </button>
+          );
+        })}
       </div>
       {showReasons && !reasonPicked && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
+        <div className="flex flex-wrap gap-3 mt-2">
           {INACCURACY_REASONS.map((reason) => (
             <button
               key={reason}
               onClick={() => handleReason(reason)}
-              className="px-2.5 py-1 text-[11px] rounded-full border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors"
+              className="font-sans uppercase"
+              style={{
+                fontSize: 9.5,
+                letterSpacing: "0.16em",
+                color: "var(--accent)",
+                borderBottom: "1px solid var(--accent)",
+                paddingBottom: 1,
+              }}
             >
               {reason}
             </button>
@@ -148,40 +178,86 @@ function FeedbackRow({ item, city }: { item: FeedItem; city: string }) {
         </div>
       )}
       {reasonPicked && (
-        <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Thanks for the detail</p>
+        <p
+          className="font-sans"
+          style={{
+            fontSize: 11,
+            color: "var(--text-muted)",
+            marginTop: 6,
+          }}
+        >
+          Thanks for the detail
+        </p>
       )}
     </div>
   );
 }
 
+function VerifyBadge() {
+  return (
+    <div
+      className="inline-flex items-center gap-1 font-sans uppercase"
+      style={{
+        fontSize: 9,
+        letterSpacing: "0.18em",
+        color: "var(--accent)",
+        marginLeft: 8,
+      }}
+      title="This item references time-sensitive info — worth verifying"
+    >
+      <AlertCircle size={10} />
+      verify
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Headline — applies a serif-italic-300 treatment to digit/time runs so
+// numbers feel quietly emphatic without the heavy span work in markup.
+
+function emphasizeNumbers(text: string): React.ReactNode {
+  const pattern = /(\d{1,2}:\d{2}(?:\s?(?:am|pm|AM|PM))?|\d+(?:,\d{3})*(?:\.\d+)?)/g;
+  const parts = text.split(pattern);
+  return parts.map((part, i) => {
+    if (pattern.test(part)) {
+      pattern.lastIndex = 0;
+      return (
+        <em
+          key={i}
+          className="font-serif italic"
+          style={{ fontWeight: 300, fontStyle: "italic" }}
+        >
+          {part}
+        </em>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Card
+
 export function FeedCard({
   item,
   index,
   city,
-  isNight,
-  newRenderer = true,
-  variants = true,
-  chips = true,
+  layoutHint,
+  // Legacy props kept for compatibility — the new design ignores them.
+  newRenderer: _newRenderer = true,
+  variants: _variants = true,
+  chips: _chips = true,
 }: {
   item: FeedItem;
   index: number;
   city?: string;
   isNight?: boolean;
+  layoutHint?: Variant;
   newRenderer?: boolean;
   variants?: boolean;
   chips?: boolean;
 }) {
-  const Icon = categoryConfig[item.category]?.icon;
-  const gradient = gradients[item.category] || "from-gray-700 to-gray-500";
-  const showChips = newRenderer && chips && !!item.facts && item.facts.length > 0;
-  const variant: Variant = newRenderer && variants ? pickVariant(item, index) : "standard";
-  const night = !!isNight;
-
-  const wrapperClasses = `rounded-xl overflow-hidden backdrop-blur-xl border ${
-    night
-      ? "bg-indigo-950/40 border-white/10 shadow-lg shadow-indigo-950/20"
-      : "bg-white/60 border-white/30 shadow-lg shadow-black/5"
-  }`;
+  const variant = pickVariant(item, index, layoutHint);
 
   const animation = {
     initial: { opacity: 0, y: 20 },
@@ -189,165 +265,386 @@ export function FeedCard({
     transition: { duration: 0.4, delay: index * 0.08, ease: "easeOut" as const },
   };
 
-  // --- Variant: hero (index 0, has image) ---
-  if (variant === "hero" && item.imageUrl) {
+  const categoryLabel = categoryConfig[item.category]?.label;
+
+  // ── Hero — full-width photo, drop cap lede, fact strip ───────────────
+  if (variant === "hero") {
     return (
-      <motion.article {...animation} className={wrapperClasses}>
-        <div className="relative h-72 overflow-hidden">
-          <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
-          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-          {item.confidence === "low" && <VerifyBadge />}
-          <div className="absolute bottom-0 left-0 right-0 p-5">
-            {showChips && <Chips facts={item.facts!} isNight={true} />}
-            <h2 className="font-serif text-2xl font-bold leading-tight text-white drop-shadow">
-              {item.title}
-            </h2>
+      <motion.article {...animation}>
+        {item.imageUrl && (
+          <div style={{ width: "100%", height: 320, overflow: "hidden" }}>
+            <img
+              src={item.imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           </div>
-        </div>
-        <div className="p-5">
-          <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
-             style={night ? undefined : { color: "var(--text-secondary)" }}>
-            {item.body}
+        )}
+        <div style={{ marginTop: 16 }}>
+          <CatMark
+            category={item.category}
+            subkicker={categoryLabel ? "Almanac" : undefined}
+          />
+          <h2
+            className="font-display"
+            style={{
+              fontSize: 36,
+              lineHeight: 1.02,
+              letterSpacing: "-0.015em",
+              color: "var(--text-primary)",
+              marginBottom: 10,
+            }}
+          >
+            {emphasizeNumbers(item.title)}
+            {item.confidence === "low" && <VerifyBadge />}
+          </h2>
+          <p
+            className="font-serif italic"
+            style={{
+              fontSize: 16,
+              fontWeight: 300,
+              color: "var(--text-secondary)",
+              lineHeight: 1.45,
+              marginBottom: 14,
+            }}
+          >
+            {firstSentence(item.body)}
           </p>
+          <p
+            className="font-serif drop-cap"
+            style={{
+              fontSize: 15,
+              lineHeight: 1.6,
+              color: "var(--text-primary)",
+            }}
+          >
+            {restOfBody(item.body)}
+          </p>
+          {item.facts && item.facts.length > 0 && <FactStrip facts={item.facts} />}
           {isPreview && city && <FeedbackRow item={item} city={city} />}
         </div>
       </motion.article>
     );
   }
 
-  // --- Variant: quote (history, culture) ---
+  // ── Pull-quote — full-bleed editorial breakout ───────────────────────
   if (variant === "quote") {
     return (
-      <motion.article {...animation} className={wrapperClasses}>
-        <div className={`relative bg-gradient-to-br ${gradient} p-6`}>
-          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-          {item.confidence === "low" && <VerifyBadge />}
-          <div className="pt-8">
-            {showChips && <Chips facts={item.facts!} isNight={true} />}
-            <p className="font-serif italic text-xl leading-snug text-white/95 mb-3">
-              &ldquo;{item.title}&rdquo;
-            </p>
-            <p className="text-sm leading-relaxed text-white/80">{item.body}</p>
-          </div>
-        </div>
-        {isPreview && city && (
-          <div className="px-5 pb-3 pt-0">
-            <FeedbackRow item={item} city={city} />
-          </div>
-        )}
-      </motion.article>
-    );
-  }
-
-  // --- Variant: stat (sky, space, sports) — first fact becomes the headline number ---
-  if (variant === "stat") {
-    const headline = item.facts && item.facts.length > 0 ? item.facts[0] : null;
-    const restFacts = item.facts ? item.facts.slice(1) : [];
-    return (
-      <motion.article {...animation} className={wrapperClasses}>
-        {item.imageUrl ? (
-          <div className="relative h-32 overflow-hidden">
-            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/40" />
-            <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-            {item.confidence === "low" && <VerifyBadge />}
-          </div>
-        ) : (
-          <div className={`relative h-16 bg-gradient-to-br ${gradient}`}>
-            <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-            {item.confidence === "low" && <VerifyBadge />}
-          </div>
-        )}
-        <div className="p-5">
-          {newRenderer && headline && (
-            <p className={`font-serif text-3xl font-bold leading-none mb-1 ${
-              night ? "text-white" : "text-[var(--text-primary)]"
-            }`}>
-              {headline}
-            </p>
-          )}
-          <h2 className={`font-serif text-base font-semibold leading-snug mb-2 ${night ? "text-white/90" : ""}`}>
-            {item.title}
-          </h2>
-          {showChips && restFacts.length > 0 && <Chips facts={restFacts} isNight={night} />}
-          <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
-             style={night ? undefined : { color: "var(--text-secondary)" }}>
-            {item.body}
-          </p>
-          {isPreview && city && <FeedbackRow item={item} city={city} />}
-        </div>
-      </motion.article>
-    );
-  }
-
-  // --- Variant: minimal (community, food) — typography-only on gradient ---
-  if (variant === "minimal") {
-    return (
-      <motion.article {...animation} className={wrapperClasses}>
-        <div className={`relative bg-gradient-to-br ${gradient} p-6`}>
-          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-          {item.confidence === "low" && <VerifyBadge />}
-          <div className="pt-8">
-            {showChips && <Chips facts={item.facts!} isNight={true} />}
-            <h2 className="font-serif text-xl font-bold leading-tight text-white mb-2">
+      <motion.article {...animation}>
+        <div
+          className="relative"
+          style={{
+            margin: "32px -22px",
+            padding: "36px 30px 32px",
+            background: "var(--bg-quote)",
+            borderTop: "1px solid var(--rule)",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <span
+            aria-hidden
+            className="font-display"
+            style={{
+              position: "absolute",
+              top: 10,
+              left: 22,
+              fontSize: 80,
+              lineHeight: 1,
+              color: "var(--accent)",
+              opacity: 0.35,
+            }}
+          >
+            “
+          </span>
+          <div style={{ position: "relative", paddingTop: 26 }}>
+            <CatMark category={item.category} />
+            <p
+              className="font-display italic"
+              style={{
+                fontSize: 26,
+                lineHeight: 1.15,
+                letterSpacing: "-0.005em",
+                color: "var(--text-primary)",
+                marginBottom: 12,
+              }}
+            >
               {item.title}
-            </h2>
-            <p className="text-sm leading-relaxed text-white/85">{item.body}</p>
-            {Icon && (
-              <Icon size={120} className="absolute -bottom-6 -right-6 text-white/10 pointer-events-none" strokeWidth={1.5} />
-            )}
+              {item.confidence === "low" && <VerifyBadge />}
+            </p>
+            <p
+              className="font-sans"
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.06em",
+                color: "var(--text-secondary)",
+                marginBottom: 14,
+              }}
+            >
+              {item.facts && item.facts.length > 0
+                ? item.facts.join(" · ")
+                : null}
+            </p>
+            <p
+              className="font-serif"
+              style={{
+                fontSize: 14,
+                lineHeight: 1.55,
+                color: "var(--text-secondary)",
+              }}
+            >
+              {item.body}
+            </p>
           </div>
         </div>
-        {isPreview && city && (
-          <div className="px-5 pb-3">
-            <FeedbackRow item={item} city={city} />
-          </div>
-        )}
+        {isPreview && city && <FeedbackRow item={item} city={city} />}
       </motion.article>
     );
   }
 
-  // --- Standard (the original layout, used when newRenderer is off OR variant fallback) ---
-  return (
-    <motion.article {...animation} className={wrapperClasses}>
-      {item.imageUrl ? (
-        <div className="relative h-48 overflow-hidden">
-          <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-          {item.confidence === "low" && <VerifyBadge />}
+  // ── Stat — 2-col with big accent number ──────────────────────────────
+  if (variant === "stat") {
+    const headline =
+      item.facts && item.facts.length > 0 ? item.facts[0] : null;
+    const { value, unit } = splitNumberUnit(headline || "");
+    const labelFact = item.facts && item.facts.length > 1 ? item.facts[1] : null;
+    return (
+      <motion.article {...animation}>
+        <CatMark category={item.category} />
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: "1fr auto",
+            gap: 16,
+            alignItems: "start",
+          }}
+        >
+          <h3
+            className="font-display"
+            style={{
+              fontSize: 28,
+              lineHeight: 1.05,
+              letterSpacing: "-0.01em",
+              color: "var(--text-primary)",
+            }}
+          >
+            {item.title}
+            {item.confidence === "low" && <VerifyBadge />}
+          </h3>
+          {value && (
+            <div style={{ textAlign: "right" }}>
+              <div className="flex items-baseline justify-end gap-1">
+                <span
+                  className="font-display"
+                  style={{
+                    fontSize: 40,
+                    lineHeight: 1,
+                    color: "var(--accent)",
+                  }}
+                >
+                  {value}
+                </span>
+                {unit && (
+                  <span
+                    className="font-sans"
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    {unit}
+                  </span>
+                )}
+              </div>
+              {labelFact && (
+                <p
+                  className="font-sans uppercase"
+                  style={{
+                    fontSize: 9.5,
+                    letterSpacing: "0.18em",
+                    color: "var(--text-muted)",
+                    marginTop: 4,
+                  }}
+                >
+                  {labelFact}
+                </p>
+              )}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className={`relative h-24 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-          {Icon && <Icon size={48} className="text-white/20" strokeWidth={1.5} />}
-          <div className="absolute top-3 left-3"><CategoryPill category={item.category} /></div>
-          {item.confidence === "low" && <VerifyBadge />}
-        </div>
-      )}
-      <div className="p-5">
-        <h2 className={`font-serif text-lg font-semibold leading-snug mb-2 ${night ? "text-white" : ""}`}>
-          {item.title}
-        </h2>
-        {showChips && <Chips facts={item.facts!} isNight={night} />}
-        <p className={`text-sm leading-relaxed ${night ? "text-white/75" : ""}`}
-           style={night ? undefined : { color: "var(--text-secondary)" }}>
+        <p
+          className="font-serif"
+          style={{
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: "var(--text-secondary)",
+            marginTop: 14,
+          }}
+        >
           {item.body}
         </p>
         {isPreview && city && <FeedbackRow item={item} city={city} />}
-      </div>
+      </motion.article>
+    );
+  }
+
+  // ── Pulse — single-line list signal ──────────────────────────────────
+  if (variant === "pulse") {
+    const value =
+      item.facts && item.facts.length > 0 ? item.facts[0] : null;
+    return (
+      <motion.article {...animation}>
+        <div
+          className="grid items-baseline"
+          style={{
+            gridTemplateColumns: "62px 1fr auto",
+            gap: 12,
+            padding: "14px 0",
+          }}
+        >
+          <span
+            className="font-sans uppercase"
+            style={{
+              fontSize: 9.5,
+              letterSpacing: "0.18em",
+              color: "var(--accent)",
+            }}
+          >
+            {categoryLabel || item.category}
+          </span>
+          <h3
+            className="font-serif"
+            style={{
+              fontSize: 15,
+              lineHeight: 1.3,
+              color: "var(--text-primary)",
+            }}
+          >
+            {item.title}
+            {item.confidence === "low" && <VerifyBadge />}
+          </h3>
+          {value && (
+            <span
+              className="font-sans"
+              style={{
+                fontSize: 11,
+                color: "var(--text-secondary)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {value}
+            </span>
+          )}
+        </div>
+        {isPreview && city && <FeedbackRow item={item} city={city} />}
+      </motion.article>
+    );
+  }
+
+  // ── Standard — image + body ──────────────────────────────────────────
+  if (variant === "standard") {
+    return (
+      <motion.article {...animation}>
+        {item.imageUrl && (
+          <div
+            style={{
+              width: "100%",
+              height: 200,
+              overflow: "hidden",
+              marginBottom: 14,
+            }}
+          >
+            <img
+              src={item.imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+        <CatMark category={item.category} />
+        <h3
+          className="font-display"
+          style={{
+            fontSize: 24,
+            lineHeight: 1.1,
+            letterSpacing: "-0.01em",
+            color: "var(--text-primary)",
+            marginBottom: 8,
+          }}
+        >
+          {item.title}
+          {item.confidence === "low" && <VerifyBadge />}
+        </h3>
+        <p
+          className="font-serif"
+          style={{
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: "var(--text-secondary)",
+          }}
+        >
+          {item.body}
+        </p>
+        {item.facts && item.facts.length > 0 && <FactStrip facts={item.facts} />}
+        {isPreview && city && <FeedbackRow item={item} city={city} />}
+      </motion.article>
+    );
+  }
+
+  // ── Field notes — typographic only ───────────────────────────────────
+  return (
+    <motion.article {...animation}>
+      <CatMark category={item.category} />
+      <h3
+        className="font-display"
+        style={{
+          fontSize: 22,
+          lineHeight: 1.1,
+          letterSpacing: "-0.01em",
+          color: "var(--text-primary)",
+          marginBottom: 8,
+        }}
+      >
+        {item.title}
+        {item.confidence === "low" && <VerifyBadge />}
+      </h3>
+      <p
+        className="font-serif"
+        style={{
+          fontSize: 14,
+          lineHeight: 1.55,
+          color: "var(--text-secondary)",
+        }}
+      >
+        {item.body}
+      </p>
+      {isPreview && city && <FeedbackRow item={item} city={city} />}
     </motion.article>
   );
 }
 
-function VerifyBadge() {
-  return (
-    <div
-      className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/90 text-amber-700"
-      title="This item references time-sensitive info — worth verifying"
-    >
-      <AlertCircle size={10} />
-      verify
-    </div>
-  );
+// ──────────────────────────────────────────────────────────────────────
+// helpers
+
+function firstSentence(body: string): string {
+  if (!body) return "";
+  const match = body.match(/^[^.!?]+[.!?]/);
+  return match ? match[0].trim() : body.split(/\s+/).slice(0, 16).join(" ") + "…";
+}
+
+function restOfBody(body: string): string {
+  const first = firstSentence(body);
+  if (!body.startsWith(first)) return body;
+  return body.slice(first.length).trim() || first;
+}
+
+function splitNumberUnit(raw: string): { value: string; unit: string } {
+  if (!raw) return { value: "", unit: "" };
+  // 9:30pm → value 9:30, unit pm
+  const m1 = raw.match(/^(\d{1,2}:\d{2})\s*(am|pm|AM|PM)?$/);
+  if (m1) return { value: m1[1], unit: m1[2] ? m1[2].toLowerCase() : "" };
+  // 48°F → value 48°, unit F
+  const m2 = raw.match(/^(\d+(?:\.\d+)?[°%]?)\s*([a-zA-Z]+)?$/);
+  if (m2) return { value: m2[1], unit: m2[2] || "" };
+  // Fallback — whole string as value
+  return { value: raw, unit: "" };
 }

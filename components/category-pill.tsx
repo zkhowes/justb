@@ -123,6 +123,9 @@ const categoryConfig: Record<
 
 export { categoryConfig };
 
+/**
+ * Legacy colored bubble — still used by admin/debug screens.
+ */
 export function CategoryPill({ category }: { category: Category }) {
   const config = categoryConfig[category];
   if (!config) return null;
@@ -136,5 +139,52 @@ export function CategoryPill({ category }: { category: Category }) {
       <Icon size={12} />
       {config.label}
     </span>
+  );
+}
+
+/**
+ * Magazine-style category mark — a 1px accent rule above an uppercase kicker.
+ * Used in feed cards. `subkicker` adds a "·" + extra text on the same line
+ * (e.g. "Sky · Almanac" or "History · 97 yrs ago").
+ */
+export function CatMark({
+  category,
+  subkicker,
+}: {
+  category: Category;
+  subkicker?: string;
+}) {
+  const config = categoryConfig[category];
+  const label = config?.label ?? category;
+
+  return (
+    <div style={{ minWidth: 56, marginBottom: 8 }}>
+      <div
+        aria-hidden
+        style={{
+          width: "100%",
+          height: 1,
+          background: "var(--accent)",
+          marginBottom: 6,
+        }}
+      />
+      <span
+        className="font-sans uppercase"
+        style={{
+          fontSize: 9.5,
+          letterSpacing: "0.18em",
+          color: "var(--accent)",
+          lineHeight: 1,
+        }}
+      >
+        {label}
+        {subkicker && (
+          <>
+            {" · "}
+            <span style={{ color: "var(--accent)" }}>{subkicker}</span>
+          </>
+        )}
+      </span>
+    </div>
   );
 }
