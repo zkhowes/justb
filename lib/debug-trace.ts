@@ -15,6 +15,13 @@ import { fetchWaterMoments } from "./moments/water";
 import { fetchAlertMoments } from "./moments/alerts";
 import { MomentContext, LocationContext } from "./moments/types";
 import { FeedItem, GlyphData, Category } from "./types";
+import {
+  balanceFeedCategoryMix,
+  buildFeedPrompt,
+  buildLlmOnlyInstructions,
+  filterRepeatedVarietySubjectsWithMinimum,
+  formatMomentsForPrompt,
+} from "./feed-prompt";
 
 // --- Trace types ---
 
@@ -86,7 +93,7 @@ export interface FeedDebugTrace {
 // --- Valid categories (duplicated from generate-feed to avoid circular) ---
 
 const VALID_CATEGORIES: Set<string> = new Set([
-  "sky-space", "sky", "space", "nature", "local-scene", "sports", "events",
+  "sky-space", "sky", "space", "daylight", "nature", "local-scene", "sports", "events",
   "earth-garden", "history", "culture", "food", "community", "happenings",
   "water", "air", "civic",
 ]);
@@ -261,48 +268,19 @@ export async function generateFeedWithTrace(
 
   // 5. Determine LLM-only categories
   const coveredCategories = new Set(moments.map((m) => m.category));
-  const llmOnlyCategories: string[] = [];
-  if (!coveredCategories.has("nature")) llmOnlyCategories.push("nature");
-  if (!coveredCategories.has("local-scene")) llmOnlyCategories.push("local-scene");
-  if (!coveredCategories.has("earth-garden")) llmOnlyCategories.push("earth-garden");
-  if (!coveredCategories.has("food")) llmOnlyCategories.push("food");
+  const llmOnlyInstructions = buildLlmOnlyInstructions(coveredCategories);
 
   // 6. Build prompt (same as generate-feed.ts)
-  const momentData = moments
-    .map((m) => `[${m.category}] (source: ${m.source})\n${m.data}`)
-    .join("\n\n");
-
-  const llmOnlyInstructions: string[] = [];
-  if (!coveredCategories.has("nature")) llmOnlyInstructions.push("nature(3): what's happening in nature RIGHT NOW — migrating/arriving birds, flowers blooming (daffodils, cherry blossoms, crocuses), trees budding or leafing out, seasonal fungi, tidal patterns. Be phenologically specific to this week and region. Skip if nothing specific to this week/season/place.");
-  if (!coveredCategories.has("local-scene")) llmOnlyInstructions.push("local-scene(1): a specific real neighborhood, park, street, or local institution (e.g. a beloved independent radio station, bookstore, coffee roaster) — NOT the city's most famous tourist landmark. Rotate through a variety of neighborhoods, parks, and local institutions — only feature the city's most famous landmark if something specific and timely is happening there. Skip if nothing specific to this week/season/place.");
-  if (!coveredCategories.has("earth-garden")) llmOnlyInstructions.push("earth-garden(1): pick whichever is more fascinating today — local geology (volcanic history, glacial features, fault lines, soil composition, notable rock formations) OR a timely gardening tip for the region. Vary between the two across days. Skip if nothing specific to this week/season/place.");
-  if (!coveredCategories.has("food")) llmOnlyInstructions.push("food/community(1): seasonal ingredient, local dish, or community tradition. Skip if nothing specific to this week/season/place.");
-
-  const promptText = `Write a daily feed for ${city} on ${date} (timezone: ${loc.timezone}). Return ONLY a JSON array, no markdown.
-
-## Structured data from APIs (use this verbatim for these categories):
-${momentData}
-
-## Categories you must generate from your knowledge:
-${llmOnlyInstructions.join("\n")}
-
-## Rules
-- For categories with API data above, write compelling prose BASED ON that data. Don't invent different events/games.
-- "sky" gets 1 item about golden hour, sunset quality, and daylight milestones. Do NOT repeat sunrise/sunset times or moon phase (shown separately in the UI glyphs).
-- "space" gets 1 item about visible planets, constellations, and notable celestial objects tonight. Be specific about where to look (compass direction) and when. Do NOT repeat moon phase (shown in glyphs).
-- sports gets 1 item: consolidate the game data into one engaging summary. If no sports data was provided, skip this category entirely.
-- events gets 1 item: pick the 2-3 best events and highlight them. If no events data was provided, skip this category entirely.
-- happenings gets 1 item: pick the best open-data/community-calendar items. These should feel like "things locals can actually do this week", not generic ticketed entertainment.
-- water, air, and civic each get at most 1 item, only when the supplied source data is genuinely useful or interesting today. Keep them practical and plain-spoken.
-- history gets 1 item: STRONGLY prefer an on-this-day fact with a direct connection to ${city} or its region (state, Pacific NW, etc). If none connect, use your own knowledge ONLY if you are highly confident about the specific date. If you cannot confidently tie a specific event to this exact date, write about a seasonal historical pattern for the region instead (e.g. "This time of year in the 1850s, settlers were..." or "Late March historically marked..."). NEVER fabricate or guess specific dates — getting a date wrong is worse than being general. Include indigenous history when relevant.
-- If community/reddit data was provided, write 1 community item highlighting the most interesting local intel. Focus on actionable tips, timely discoveries, or useful PSAs — not complaints or generic chatter.
-- If culture data was provided, use it for the culture item. Otherwise pick 1 from culture/food/community.
-- Aim for 10 items, but only include what's genuinely relevant — fewer is fine. Do not pad with generic filler.
-${recentTopics && recentTopics.length > 0 ? `\n## Recently covered topics (vary your coverage, avoid repeating these):\n${recentTopics.join(", ")}` : ""}
-
-Each object: {"id":"slug","title":"5-10 words","body":"2-3 sentences plain text","category":"...","confidence":"high|medium|low","imageQuery":"specific 2-4 word Pexels search for the SINGLE most visual subject in your body text. If the body mentions multiple things (e.g. cherry blossoms AND returning swallows), pick the ONE most visually striking for the image — do NOT try to summarize everything. Examples: 'cherry blossoms branch closeup' not 'spring nature seattle', 'barn swallow flight' not 'birds flowers'. NEVER use a famous landmark unless the body is actually about that landmark. For sky-space: use the specific constellation or planet name (e.g. 'orion constellation stars' not 'night sky')."}
-
-Tone: knowledgeable local friend. No HTML tags.`;
+  const momentData = formatMomentsForPrompt(moments);
+  const promptText = buildFeedPrompt({
+    city,
+    date,
+    timezone: loc.timezone,
+    momentData,
+    llmOnlyInstructions,
+    recentTopics,
+    includeFacts: false,
+  });
 
   // 7. Call Claude
   const llmStart = Date.now();
@@ -328,7 +306,7 @@ Tone: knowledgeable local friend. No HTML tags.`;
     tokensIn: message.usage.input_tokens,
     tokensOut: message.usage.output_tokens,
     durationMs: llmDuration,
-    llmOnlyCategories,
+    llmOnlyCategories: llmOnlyInstructions,
     apiCoveredCategories: Array.from(coveredCategories),
   };
 
@@ -349,7 +327,11 @@ Tone: knowledgeable local friend. No HTML tags.`;
     sourceByCategory[m.category] = m.source;
   }
 
-  const cards: CardTrace[] = rawItems.map((item) => {
+  const filteredRawItems = balanceFeedCategoryMix(
+    filterRepeatedVarietySubjectsWithMinimum(rawItems, recentTopics)
+  );
+
+  const cards: CardTrace[] = filteredRawItems.map((item) => {
     const cat = normalizeCategory(item.category);
     return {
       id: item.id,

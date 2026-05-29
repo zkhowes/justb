@@ -10,13 +10,15 @@ import { LocationInput } from "@/components/location-input";
 import { BreathingExercise } from "@/components/breathing-exercise";
 import { Masthead } from "@/components/masthead";
 import { useDarkMode } from "@/lib/use-dark-mode";
+import { normalizeRecentTopics, recentTopicsFromItems } from "@/lib/feed-prompt";
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
 type Phase = "location" | "ready" | "breathing" | "waiting" | "feed";
 
-// v3: paper/ink magazine refresh — bumped so any cache shape adjustments self-heal.
-const FEED_CACHE_VERSION = 3;
+// v9: feed shape changed — happenings now produces 0–N full cards (one per
+// event), and the new "daylight" category emits a Local pulse row.
+const FEED_CACHE_VERSION = 9;
 
 function getCacheKey(cityName: string) {
   const dateStr = new Date().toISOString().slice(0, 10);
@@ -26,7 +28,7 @@ function getCacheKey(cityName: string) {
 function getRecentTopics(cityName: string): string[] {
   const topics: string[] = [];
   const today = new Date();
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1; i <= 14; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const key = `justb-feed-v${FEED_CACHE_VERSION}:${cityName.toLowerCase().trim()}:${d.toISOString().slice(0, 10)}`;
@@ -36,15 +38,13 @@ function getRecentTopics(cityName: string): string[] {
       const parsed = JSON.parse(cached);
       const items: FeedItem[] = Array.isArray(parsed) ? parsed : parsed.items;
       if (items) {
-        for (const item of items) {
-          if (item.title) topics.push(item.title);
-        }
+        topics.push(...recentTopicsFromItems(items));
       }
     } catch {
       // Skip corrupted cache entries
     }
   }
-  return topics;
+  return normalizeRecentTopics(topics, 80);
 }
 
 // Volume number = years since launch (2026) + 26; Issue = day of year.
@@ -285,7 +285,7 @@ export default function Home() {
       });
       const params = new URLSearchParams({ city: cityName, date: localDate });
       if (recentTopics.length > 0) {
-        params.set("recentTopics", recentTopics.join(","));
+        recentTopics.forEach((topic) => params.append("recentTopics", topic));
       }
       const res = await fetch(`/api/feed?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
@@ -315,7 +315,7 @@ export default function Home() {
       });
       const params = new URLSearchParams({ city: cityName, date: localDate });
       if (recentTopics.length > 0) {
-        params.set("recentTopics", recentTopics.join(","));
+        recentTopics.forEach((topic) => params.append("recentTopics", topic));
       }
       const res = await fetch(`/api/feed?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch feed");
@@ -542,27 +542,40 @@ export default function Home() {
   }
 
   // Feed
-  const leadItem = items.find((item) => item.imageUrl) ?? items[0];
+  // Happenings are their own dedicated section now — slice them out first so
+  // they don't compete for the lead/quote/pulse/field-note slots.
+  const happeningsItems = items.filter((item) => item.category === "happenings");
+  const happeningIds = new Set(happeningsItems.map((item) => item.id));
+
+  const leadItem =
+    items.find((item) => item.imageUrl && !happeningIds.has(item.id)) ??
+    items.find((item) => !happeningIds.has(item.id));
   const leadId = leadItem?.id;
   const pulseItems = items
     .filter(
       (item) =>
         item.id !== leadId &&
-        ["happenings", "water", "air", "civic", "community"].includes(
+        !happeningIds.has(item.id) &&
+        ["daylight", "water", "air", "civic", "community"].includes(
           item.category
         )
     )
-    .slice(0, 3);
+    .slice(0, 4);
   const pulseIds = new Set(pulseItems.map((item) => item.id));
   const quoteItem = items.find(
     (item) =>
       item.id !== leadId &&
+      !happeningIds.has(item.id) &&
       !pulseIds.has(item.id) &&
       (item.category === "history" || item.category === "culture")
   );
   const quoteId = quoteItem?.id;
   const remainingItems = items.filter(
-    (item) => item.id !== leadId && !pulseIds.has(item.id) && item.id !== quoteId
+    (item) =>
+      item.id !== leadId &&
+      !happeningIds.has(item.id) &&
+      !pulseIds.has(item.id) &&
+      item.id !== quoteId
   );
 
   return (
@@ -642,6 +655,58 @@ export default function Home() {
                 </div>
               )}
 
+              {happeningsItems.length > 0 && (
+                <section style={{ marginTop: 32 }}>
+                  <div
+                    className="flex items-end justify-between"
+                    style={{ marginBottom: 16 }}
+                  >
+                    <h3
+                      className="font-display"
+                      style={{
+                        fontSize: 18,
+                        letterSpacing: "-0.005em",
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      Happenings
+                    </h3>
+                    <span
+                      className="font-sans uppercase"
+                      style={{
+                        fontSize: 9.5,
+                        letterSpacing: "0.22em",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      this week
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                    {happeningsItems.map((item, i) => (
+                      <div
+                        key={item.id}
+                        data-card-index={i + 2}
+                        style={{
+                          paddingBottom: i < happeningsItems.length - 1 ? 24 : 0,
+                          borderBottom:
+                            i < happeningsItems.length - 1
+                              ? "1px solid var(--rule)"
+                              : "none",
+                        }}
+                      >
+                        <FeedCard
+                          item={item}
+                          index={i + 2}
+                          city={city || undefined}
+                          layoutHint="happening"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {pulseItems.length > 0 && (
                 <section style={{ marginTop: 32 }}>
                   <div
@@ -673,7 +738,7 @@ export default function Home() {
                     {pulseItems.map((item, i) => (
                       <div
                         key={item.id}
-                        data-card-index={i + 2}
+                        data-card-index={i + 2 + happeningsItems.length}
                         style={{
                           borderTop: i === 0 ? "1px solid var(--rule)" : "none",
                           borderBottom: "1px solid var(--rule)",
@@ -681,7 +746,7 @@ export default function Home() {
                       >
                         <FeedCard
                           item={item}
-                          index={i + 2}
+                          index={i + 2 + happeningsItems.length}
                           city={city || undefined}
                           layoutHint="pulse"
                         />
@@ -722,11 +787,15 @@ export default function Home() {
                     {remainingItems.map((item, i) => (
                       <div
                         key={item.id}
-                        data-card-index={i + 2 + pulseItems.length}
+                        data-card-index={
+                          i + 2 + happeningsItems.length + pulseItems.length
+                        }
                       >
                         <FeedCard
                           item={item}
-                          index={i + 2 + pulseItems.length}
+                          index={
+                            i + 2 + happeningsItems.length + pulseItems.length
+                          }
                           city={city || undefined}
                         />
                       </div>

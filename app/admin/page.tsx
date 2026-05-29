@@ -15,6 +15,8 @@ import {
   Database,
 } from "lucide-react";
 import { useDisplayPrefs, DEFAULT_PREFS, type DisplayPrefs } from "@/lib/display-prefs";
+import { normalizeRecentTopics, recentTopicsFromItems } from "@/lib/feed-prompt";
+import type { FeedItem } from "@/lib/types";
 
 interface Stats {
   feedbackCounts: Array<{
@@ -87,6 +89,28 @@ interface FeedDebugTrace {
 }
 
 type Tab = "overview" | "debug" | "display";
+
+const FEED_CACHE_VERSION = 3;
+
+function getRecentTopics(cityName: string): string[] {
+  const topics: string[] = [];
+  const today = new Date();
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = `justb-feed-v${FEED_CACHE_VERSION}:${cityName.toLowerCase().trim()}:${d.toISOString().slice(0, 10)}`;
+    try {
+      const cached = localStorage.getItem(key);
+      if (!cached) continue;
+      const parsed = JSON.parse(cached);
+      const items: FeedItem[] = Array.isArray(parsed) ? parsed : parsed.items;
+      if (items) topics.push(...recentTopicsFromItems(items));
+    } catch {
+      // Skip corrupted cache entries
+    }
+  }
+  return normalizeRecentTopics(topics, 80);
+}
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -208,7 +232,10 @@ export default function AdminPage() {
     setDebugLoading(true);
     setDebugError(null);
     setDebugTrace(null);
-    const url = `/api/admin/debug-feed?city=${encodeURIComponent(debugCity)}&date=${encodeURIComponent(debugDate)}`;
+    const params = new URLSearchParams({ city: debugCity, date: debugDate });
+    const recentTopics = getRecentTopics(debugCity);
+    if (recentTopics.length > 0) recentTopics.forEach((topic) => params.append("recentTopics", topic));
+    const url = `/api/admin/debug-feed?${params.toString()}`;
     fetch(url)
       .then((r) => {
         if (!r.ok) return r.json().then((d) => { throw new Error(d.error || "Request failed"); });

@@ -20,6 +20,7 @@ interface CommunityEvent {
   location: string;
   date: string; // ISO date or human-readable
   detail?: string;
+  link?: string; // direct URL to the event page when available
 }
 
 interface EventRssItem {
@@ -205,6 +206,7 @@ function rssItemToEvent(item: EventRssItem, source: RssSourceConfig): CommunityE
     location: item.location ?? "",
     date: item.startDate || item.pubDate || "",
     detail: item.description ? `${item.description} Source: ${source.name}.` : `Source: ${source.name}.`,
+    link: item.link || undefined,
   };
 }
 
@@ -264,7 +266,8 @@ function parseSeattleChildEvents(html: string, source: HtmlCalendarSourceConfig)
       type: inferEventType({ title, description: "", pubDate: "", link }),
       location,
       date: calendarDateToISO(dateText),
-      detail: `Date/time: ${dateText}${link ? `. Source: ${source.name}. ${link}` : ` Source: ${source.name}.`}`,
+      detail: dateText ? `Date/time: ${dateText}. Source: ${source.name}.` : `Source: ${source.name}.`,
+      link,
     });
   }
 
@@ -295,7 +298,6 @@ function parseDo206Events(html: string, source: HtmlCalendarSourceConfig): Commu
       soldOut ? "sold out" : "",
       free ? "free" : "",
       `Source: ${source.name}.`,
-      permalink ? `https://do206.com${permalink}` : "",
     ].filter(Boolean);
 
     events.push({
@@ -304,6 +306,7 @@ function parseDo206Events(html: string, source: HtmlCalendarSourceConfig): Commu
       location: venue,
       date: startDate,
       detail: bits.join(" "),
+      link: permalink ? `https://do206.com${permalink}` : undefined,
       ...(endDate ? { endDate } : {}),
     } as CommunityEvent);
   }
@@ -465,6 +468,13 @@ async function fetchUnfiltered(
   }
 }
 
+/** Minimum priority score for an event to surface as a happening card.
+ *  Festivals/markets score 4-10, plain "Event" permits score 0, workshops score -1.
+ *  A floor of 2 culls the noise while keeping anything genuinely worth doing. */
+const HAPPENINGS_SCORE_FLOOR = 2;
+/** Cap on cards per feed — bounds prompt token cost and keeps the section scannable. */
+const HAPPENINGS_MAX_CARDS = 6;
+
 function formatEvents(
   events: CommunityEvent[],
   loc: LocationContext
@@ -492,48 +502,67 @@ function formatEvents(
 
   if (filteredEvents.length === 0) return [];
 
-  // Deduplicate by name (case-insensitive)
+  // Deduplicate by name (case-insensitive); apply value gate; sort + cap.
   const seen = new Set<string>();
-  const unique = filteredEvents
+  const scored = filteredEvents
     .filter((e) => {
       const key = e.name.toLowerCase().slice(0, 40);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .sort((a, b) => eventPriority(b) - eventPriority(a));
-
-  const lines = unique.slice(0, 10).map((e) => {
-    const parts = [e.name];
-    if (e.type && e.type !== "Event") parts.push(`(${e.type})`);
-    if (e.location) parts.push(`— ${e.location}`);
-    if (e.detail) parts.push(`— ${e.detail}`);
-    if (e.date) {
-      try {
-        const d = /^\d{4}-\d{2}-\d{2}$/.test(e.date)
-          ? new Date(`${e.date}T12:00:00`)
-          : new Date(e.date);
-        parts.push(
-          `on ${d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`
-        );
-      } catch {
-        // skip date formatting
-      }
-    }
-    return parts.join(" ");
-  });
+    .map((e) => ({ event: e, score: eventPriority(e) }))
+    .filter(({ score }) => score >= HAPPENINGS_SCORE_FLOOR)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, HAPPENINGS_MAX_CARDS);
 
   console.log(
-    `[CommunityEvents] ${loc.city}: ${events.length} events this week, showing ${lines.length}`
+    `[CommunityEvents] ${loc.city}: ${events.length} events this week, ${scored.length} surfaced after value gate`
   );
 
-  return [
-    {
-      category: "happenings",
-      source: "city-event-sources",
-      data: `Community events happening in ${loc.city} this week:\n${lines.join("\n")}\n\nHighlight the 2-3 most interesting community events — prioritize farmers markets, street fairs, festivals, free workshops, and block parties over generic permits. Include day/location if available. Write as a local friend sharing what's worth checking out this week.`,
-    },
+  // One MomentContext per event so the LLM produces one card per event.
+  return scored.map(({ event, score }) => ({
+    category: "happenings" as const,
+    source: "community-events",
+    data: buildEventPromptBlock(event, score, loc),
+  }));
+}
+
+function buildEventPromptBlock(
+  event: CommunityEvent,
+  score: number,
+  loc: LocationContext
+): string {
+  const whenHuman = formatEventWhen(event.date);
+  const venue = event.location || "—";
+  const lines = [
+    `Community event in ${loc.city}:`,
+    `name: ${event.name}`,
+    `type: ${event.type || "Event"}`,
+    `venue: ${venue}`,
+    `when: ${whenHuman || "—"}`,
+    `score: ${score}`,
   ];
+  if (event.detail) lines.push(`detail: ${event.detail}`);
+  if (event.link) lines.push(`link: ${event.link}`);
+
+  return `${lines.join("\n")}\n\nWrite ONE happening card for this event. Title MUST be the "name" verbatim. Facts MUST be exactly: ["<when>", "<venue>"] (drop a fact only if its source value is "—"). Body: 2–3 sentences for a curious local — lead with what it is, not the date. Do not invent details beyond what's above.`;
+}
+
+function formatEventWhen(raw: string): string {
+  if (!raw) return "";
+  // ISO date only — show as weekday + short date.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const d = new Date(`${raw}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+  // ISO datetime — weekday + short date + time.
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const datePart = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const timePart = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${datePart} · ${timePart}`;
 }
 
 function eventPriority(event: CommunityEvent): number {

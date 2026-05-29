@@ -2,6 +2,7 @@ export type MomentCategory =
   | "sky-space"
   | "sky"
   | "space"
+  | "daylight"
   | "nature"
   | "local-scene"
   | "sports"

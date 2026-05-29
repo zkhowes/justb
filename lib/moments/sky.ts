@@ -60,7 +60,10 @@ export async function fetchSkyMoments(
     }
   }
 
-  // Daylight duration + meaningful milestones
+  const results: MomentContext[] = [];
+
+  // Daylight moment: emitted separately so the feed page can surface it as a
+  // single-line row in Local pulse. Sky-card content stays in `lines` above.
   if (sunTimes.sunrise && sunTimes.sunset) {
     const daylightMins = minutesBetween(sunTimes.sunrise, sunTimes.sunset);
     const daylightHrs = Math.floor(daylightMins / 60);
@@ -84,32 +87,35 @@ export async function fetchSkyMoments(
       // Equinox/solstice proximity: daylight change direction flipped
       if (prevDiff !== 0 && diff !== 0 && Math.sign(prevDiff) !== Math.sign(diff)) {
         if (diff < 0) {
-          milestone = " — today marks the start of shortening days.";
+          milestone = " Today marks the start of shortening days.";
         } else {
-          milestone = " — today marks the start of lengthening days.";
+          milestone = " Today marks the start of lengthening days.";
         }
       }
       // 12-hour crossing
       else if (yesterdayMins < 720 && daylightMins >= 720) {
-        milestone = " — today crosses 12 hours of daylight.";
+        milestone = " Today crosses 12 hours of daylight.";
       }
 
       const absDiff = Math.abs(diff);
       if (absDiff >= 1) {
         const moreOrLess = diff > 0 ? "more" : "less";
-        lines.push(`${daylightHrs}h ${daylightRemMins}m of daylight today — ${absDiff} minute${absDiff > 1 ? "s" : ""} ${moreOrLess} than yesterday${milestone}`);
+        const signed = `${diff > 0 ? "+" : "−"}${absDiff} min`;
+        results.push({
+          category: "daylight",
+          source: "suncalc",
+          data: `Daylight in ${loc.city}: ${daylightHrs}h ${daylightRemMins}m today, ${absDiff} minute${absDiff > 1 ? "s" : ""} ${moreOrLess} than yesterday.${milestone}\n\nWrite ONE short sentence (no second sentence, no preamble). Facts MUST be exactly two short chips: ["${daylightHrs}h ${daylightRemMins}m", "${signed}"]. Title should be 2-4 words about daylight.`,
+        });
       }
     }
   }
 
-  const results: MomentContext[] = [];
-
-  // Sky moment: golden hour, sunset quality, daylight milestones
+  // Sky moment: golden hour, sunset quality (daylight is its own moment above).
   if (lines.length > 0) {
     results.push({
       category: "sky",
       source: "suncalc+weather",
-      data: `Sky data for ${loc.city}:\n${lines.join("\n")}\n\nNote: sunrise/sunset times are shown separately in the glyphs UI — do NOT repeat them. Focus on golden hour, sunset quality, and daylight milestones.`,
+      data: `Sky data for ${loc.city}:\n${lines.join("\n")}\n\nNote: sunrise/sunset times are shown separately in the glyphs UI — do NOT repeat them. Focus on golden hour, sunset quality, and viewing conditions.`,
     });
   }
 

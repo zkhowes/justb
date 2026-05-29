@@ -13,9 +13,11 @@ export async function GET(request: NextRequest) {
       month: "long",
       day: "numeric",
     });
-  const recentTopicsParam = searchParams.get("recentTopics");
-  const recentTopics = recentTopicsParam
-    ? recentTopicsParam.split(",").map((t) => t.trim()).filter(Boolean)
+  const recentTopicParams = searchParams.getAll("recentTopics");
+  const recentTopics = recentTopicParams.length > 0
+    ? (recentTopicParams.length === 1 ? recentTopicParams[0].split(",") : recentTopicParams)
+        .map((t) => t.trim())
+        .filter(Boolean)
     : undefined;
 
   if (!city) {

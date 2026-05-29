@@ -9,7 +9,7 @@ import { CatMark, categoryConfig } from "./category-pill";
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === "true";
 
 type Rating = "good" | "irrelevant" | "inaccurate";
-type Variant = "hero" | "quote" | "stat" | "pulse" | "field" | "standard";
+type Variant = "hero" | "quote" | "stat" | "pulse" | "field" | "standard" | "happening";
 
 const INACCURACY_REASONS = [
   "Wrong time/date",
@@ -20,6 +20,7 @@ const INACCURACY_REASONS = [
 
 function pickVariant(item: FeedItem, index: number, layoutHint?: Variant): Variant {
   if (layoutHint) return layoutHint;
+  if (item.category === "happenings") return "happening";
   if (index === 0 && item.imageUrl) return "hero";
   if (item.category === "history" || item.category === "culture") return "quote";
   if (
@@ -29,7 +30,7 @@ function pickVariant(item: FeedItem, index: number, layoutHint?: Variant): Varia
   )
     return "stat";
   if (
-    item.category === "happenings" ||
+    item.category === "daylight" ||
     item.category === "water" ||
     item.category === "air" ||
     item.category === "civic" ||
@@ -396,6 +397,68 @@ export function FeedCard({
             </p>
           </div>
         </div>
+        {isPreview && city && <FeedbackRow item={item} city={city} />}
+      </motion.article>
+    );
+  }
+
+  // ── Happening — full editorial card for a community event ────────────
+  // Title is the event name verbatim; meta line is `when | venue` pulled
+  // from item.facts; body is the LLM-written blurb. No image — community
+  // calendars don't ship usable art, and Pexels stock for event names
+  // ("art explosion festival" → bombs/explosions) misleads more than helps.
+  if (variant === "happening") {
+    const when = item.facts?.[0];
+    const venue = item.facts?.[1];
+    return (
+      <motion.article {...animation}>
+        <CatMark category={item.category} subkicker="This week" />
+        <h3
+          className="font-display"
+          style={{
+            fontSize: 24,
+            lineHeight: 1.1,
+            letterSpacing: "-0.01em",
+            color: "var(--text-primary)",
+            marginBottom: 8,
+          }}
+        >
+          {item.title}
+          {item.confidence === "low" && <VerifyBadge />}
+        </h3>
+        {(when || venue) && (
+          <div
+            className="font-sans"
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.06em",
+              color: "var(--text-secondary)",
+              marginBottom: 12,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {when && <span style={{ color: "var(--text-primary)" }}>{when}</span>}
+            {when && venue && (
+              <span
+                aria-hidden
+                style={{ color: "var(--rule-strong)", margin: "0 10px" }}
+              >
+                |
+              </span>
+            )}
+            {venue && <span>{venue}</span>}
+          </div>
+        )}
+        <p
+          className="font-serif"
+          style={{
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: "var(--text-secondary)",
+          }}
+        >
+          {item.body}
+        </p>
         {isPreview && city && <FeedbackRow item={item} city={city} />}
       </motion.article>
     );

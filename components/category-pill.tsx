@@ -41,6 +41,12 @@ const categoryConfig: Record<
     bg: "var(--cat-space-bg)",
     icon: Star,
   },
+  daylight: {
+    label: "Daylight",
+    color: "var(--cat-sky)",
+    bg: "var(--cat-sky-bg)",
+    icon: Sun,
+  },
   nature: {
     label: "Nature",
     color: "var(--cat-nature)",

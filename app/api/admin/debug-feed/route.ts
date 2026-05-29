@@ -19,6 +19,12 @@ export async function GET(request: NextRequest) {
       month: "long",
       day: "numeric",
     });
+  const recentTopicParams = searchParams.getAll("recentTopics");
+  const recentTopics = recentTopicParams.length > 0
+    ? (recentTopicParams.length === 1 ? recentTopicParams[0].split(",") : recentTopicParams)
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : undefined;
 
   if (!city) {
     return NextResponse.json(
@@ -28,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const trace = await generateFeedWithTrace(city, date);
+    const trace = await generateFeedWithTrace(city, date, recentTopics);
 
     // Fetch any existing feedback for these cards
     try {
